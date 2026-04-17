@@ -12,6 +12,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -51,6 +58,8 @@ interface SavedInvoice {
   business_phone?: string;
   seal_url?: string;
   signature_url?: string;
+  number_of_days?: number;
+  payment_status?: "Paid" | "Unpaid" | "Partial";
 }
 
 const SavedInvoices = () => {
@@ -66,7 +75,43 @@ const SavedInvoices = () => {
   const [businessPhone, setBusinessPhone] = useState<string>("");
   const [sealUrl, setSealUrl] = useState<string>("");
   const [signatureUrl, setSignatureUrl] = useState<string>("");
+  const [upiId, setUpiId] = useState<string>("");
+  const [bankName, setBankName] = useState<string>("");
+  const [accountNumber, setAccountNumber] = useState<string>("");
+  const [ifscCode, setIfscCode] = useState<string>("");
+  const updatePaymentStatus = async (
+    invoiceId: string,
+    status: "Paid" | "Unpaid" | "Partial"
+  ) => {
+    try {
+      const { error } = await supabase
+        .from("saved_invoices")
+        .update({ payment_status: status })
+        .eq("id", invoiceId);
 
+      if (error) throw error;
+
+      // ✅ update UI instantly
+      setInvoices((prev) =>
+        prev.map((inv) =>
+          inv.id === invoiceId
+            ? { ...inv, payment_status: status }
+            : inv
+        )
+      );
+
+      toast({
+        title: "Updated",
+        description: `Status changed to ${status}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update status",
+        variant: "destructive",
+      });
+    }
+  };
   useEffect(() => {
     if (user) {
       fetchBusinessSettings();
@@ -102,6 +147,12 @@ const SavedInvoices = () => {
       });
     }
   };
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [customerFilter, setCustomerFilter] = useState("All");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   const fetchBusinessSettings = async () => {
     if (!user) return;
@@ -118,6 +169,12 @@ const SavedInvoices = () => {
         setBusinessPhone(data.business_phone || "");
         setSealUrl(data.seal_url || "");
         setSignatureUrl(data.signature_url || "");
+
+        // ✅ ADD THESE
+        setUpiId(data.upi_id || "");
+        setBankName(data.bank_name || "");
+        setAccountNumber(data.account_number || "");
+        setIfscCode(data.ifsc_code || "");
       }
     } catch (error) {
       toast({
@@ -144,14 +201,14 @@ const SavedInvoices = () => {
         items: Array.isArray(invoice.items)
           ? invoice.items
           : typeof invoice.items === "string"
-          ? (() => {
+            ? (() => {
               try {
                 return JSON.parse(invoice.items);
               } catch {
                 return [];
               }
             })()
-          : [],
+            : [],
       }));
 
       setInvoices(processedData as SavedInvoice[]);
@@ -178,13 +235,18 @@ const SavedInvoices = () => {
     subtotal: savedInvoice.subtotal,
     taxRate: savedInvoice.tax_rate,
     taxAmount: savedInvoice.tax_amount,
-    // We only stored a final discount amount, so treat it as fixed
+
+    // ✅ ADD THIS (IMPORTANT)
+    inclusiveTax: savedInvoice.tax_rate === 0,
+
     discountType: "fixed",
     discountValue: savedInvoice.discount,
     discountAmount: savedInvoice.discount,
     total: savedInvoice.total,
     paymentInstructions: savedInvoice.payment_instructions || "",
     thankYouNote: savedInvoice.thank_you_note || "",
+    numberOfDays: savedInvoice.number_of_days || 0,
+    paymentStatus: savedInvoice.payment_status || "Unpaid",
   });
 
   const viewInvoice = (invoice: SavedInvoice) => {
@@ -196,95 +258,316 @@ const SavedInvoices = () => {
     setSelectedInvoice(convertToInvoice(invoice));
     setShouldDownload(true);
   };
+  const filteredInvoices = invoices.filter((invoice) => {
+    // 🔍 Search (invoice # or customer)
+    const matchesSearch =
+      invoice.invoice_number.toLowerCase().includes(search.toLowerCase()) ||
+      invoice.customer_name.toLowerCase().includes(search.toLowerCase());
 
+    // 📊 Status filter
+    const matchesStatus =
+      statusFilter === "All" ||
+      invoice.payment_status === statusFilter;
+
+    // 👤 Customer filter
+    const matchesCustomer =
+      customerFilter === "All" ||
+      invoice.customer_name === customerFilter;
+
+    // 📅 Date range
+    const invoiceDate = new Date(invoice.date);
+    const matchesFrom = fromDate ? invoiceDate >= new Date(fromDate) : true;
+    const matchesTo = toDate ? invoiceDate <= new Date(toDate) : true;
+
+    // ⏰ Overdue logic
+    const isOverdue =
+      invoice.number_of_days &&
+      new Date(invoice.date).getTime() +
+      invoice.number_of_days * 86400000 <
+      Date.now();
+
+    const matchesOverdue = overdueOnly ? isOverdue : true;
+
+    return (
+      matchesSearch &&
+      matchesStatus &&
+      matchesCustomer &&
+      matchesFrom &&
+      matchesTo &&
+      matchesOverdue
+    );
+  });
+  const totalSales = filteredInvoices.reduce((s, i) => s + i.total, 0);
+
+  const totalPaid = filteredInvoices.reduce(
+    (s, i) => s + (i.payment_status === "Paid" ? i.total : 0),
+    0
+  );
+
+  const totalPending = filteredInvoices.reduce(
+    (s, i) => s + (i.payment_status !== "Paid" ? i.total : 0),
+    0
+  );
+
+  const totalOverdues = filteredInvoices.filter(
+    (i) =>
+      i.number_of_days &&
+      new Date(i.date).getTime() +
+      i.number_of_days * 86400000 <
+      Date.now()
+  ).length;
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-purple-50">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center gap-4 mb-8">
-          <Button onClick={() => navigate("/")} variant="outline" size="sm">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-purple-600">
-              Saved Invoices
-            </h1>
-            <p className="text-gray-600">View and download your saved invoices</p>
+          {/* 🔥 SUMMARY CARDS */}
+
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Saved Invoices
+              </h1>
+              <p className="text-gray-500">
+                Manage and track all your invoices
+              </p>
+            </div>
+
+            <Button onClick={() => navigate("/")} variant="outline">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Dashboard
+            </Button>
+
+
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Invoices</CardTitle>
-            <CardDescription>
-              {invoices.length} saved invoice{invoices.length !== 1 ? "s" : ""}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {invoices.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <p>No saved invoices yet.</p>
-                <Button
-                  onClick={() => navigate("/invoices")}
-                  className="mt-4"
-                  variant="outline"
+        {/* 🔥 SUMMARY CARDS */}
+<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+
+  <Card className="shadow-sm hover:shadow-md transition rounded-xl">
+    <CardContent className="p-4">
+      <p className="text-xs text-gray-500">Total Sales</p>
+      <p className="text-xl font-bold text-gray-900">
+        ₹{totalSales.toFixed(2)}
+      </p>
+    </CardContent>
+  </Card>
+
+  <Card className="shadow-sm hover:shadow-md transition rounded-xl">
+    <CardContent className="p-4">
+      <p className="text-xs text-gray-500">Paid</p>
+      <p className="text-xl font-bold text-green-600">
+        ₹{totalPaid.toFixed(2)}
+      </p>
+    </CardContent>
+  </Card>
+
+  <Card className="shadow-sm hover:shadow-md transition rounded-xl">
+    <CardContent className="p-4">
+      <p className="text-xs text-gray-500">Pending</p>
+      <p className="text-xl font-bold text-yellow-600">
+        ₹{totalPending.toFixed(2)}
+      </p>
+    </CardContent>
+  </Card>
+
+  <Card className="shadow-sm hover:shadow-md transition rounded-xl">
+    <CardContent className="p-4">
+      <p className="text-xs text-gray-500">Overdues</p>
+      <p className="text-xl font-bold text-red-600">
+        {totalOverdues}
+      </p>
+    </CardContent>
+  </Card>
+
+  <Card className="shadow-sm hover:shadow-md transition rounded-xl">
+    <CardContent className="p-4">
+      <p className="text-xs text-gray-500">Invoices</p>
+      <p className="text-xl font-bold text-gray-900">
+        {filteredInvoices.length}
+      </p>
+    </CardContent>
+  </Card>
+
+</div>
+
+{/* 🔥 FILTERS */}
+<div className="bg-white border rounded-xl p-4 mb-6 shadow-sm flex flex-wrap gap-4 items-end">
+
+  {/* Search */}
+  <div className="flex flex-col">
+    <label className="text-xs text-gray-500 mb-1">Search</label>
+    <input
+      type="text"
+      placeholder="Invoice or customer"
+      className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
+      value={search}
+      onChange={(e) => setSearch(e.target.value)}
+    />
+  </div>
+
+  {/* Status */}
+  <div>
+    <label className="text-xs text-gray-500">Status</label>
+    <Select value={statusFilter} onValueChange={setStatusFilter}>
+      <SelectTrigger className="w-[130px] mt-1">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="All">All</SelectItem>
+        <SelectItem value="Paid">Paid</SelectItem>
+        <SelectItem value="Partial">Partial</SelectItem>
+        <SelectItem value="Unpaid">Unpaid</SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+
+  {/* Customer */}
+  <div>
+    <label className="text-xs text-gray-500">Customer</label>
+    <Select value={customerFilter} onValueChange={setCustomerFilter}>
+      <SelectTrigger className="w-[150px] mt-1">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="All">All</SelectItem>
+        {[...new Set(invoices.map(i => i.customer_name))].map(name => (
+          <SelectItem key={name} value={name}>{name}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+
+  {/* Dates */}
+  <input
+    type="date"
+    className="border rounded-md px-3 py-2 text-sm"
+    value={fromDate}
+    onChange={(e) => setFromDate(e.target.value)}
+  />
+
+  <input
+    type="date"
+    className="border rounded-md px-3 py-2 text-sm"
+    value={toDate}
+    onChange={(e) => setToDate(e.target.value)}
+  />
+
+  {/* Overdue */}
+  <label className="flex items-center gap-2 text-sm">
+    <input
+      type="checkbox"
+      checked={overdueOnly}
+      onChange={(e) => setOverdueOnly(e.target.checked)}
+    />
+    Overdue
+  </label>
+
+  {/* Reset */}
+  <Button variant="ghost" onClick={() => {
+    setSearch("");
+    setStatusFilter("All");
+    setCustomerFilter("All");
+    setFromDate("");
+    setToDate("");
+    setOverdueOnly(false);
+  }}>
+    Reset
+  </Button>
+</div>
+
+{/* 🔥 TABLE CARD */}
+<Card className="shadow-sm rounded-xl">
+  <CardHeader>
+    <CardTitle>Your Invoices</CardTitle>
+    <CardDescription>
+      {filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? "s" : ""}
+    </CardDescription>
+  </CardHeader>
+
+  <CardContent>
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Invoice #</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Customer</TableHead>
+            <TableHead>Due</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Total</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+
+        <TableBody>
+          {filteredInvoices.map((invoice) => (
+            <TableRow key={invoice.id} className="hover:bg-gray-50 transition">
+              <TableCell className="font-medium">
+                {invoice.invoice_number}
+              </TableCell>
+
+              <TableCell>{invoice.date}</TableCell>
+
+              <TableCell>{invoice.customer_name}</TableCell>
+
+              <TableCell>
+                {invoice.number_of_days
+                  ? `${invoice.number_of_days} days`
+                  : <span className="text-gray-400">—</span>}
+              </TableCell>
+
+              <TableCell>
+                <Select
+                  value={invoice.payment_status ?? "Unpaid"}
+                  onValueChange={(value) =>
+                    updatePaymentStatus(invoice.id, value)
+                  }
                 >
-                  Create Your First Invoice
-                </Button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice #</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoices.map((invoice) => (
-                      <TableRow key={invoice.id}>
-                        <TableCell>{invoice.invoice_number}</TableCell>
-                        <TableCell>{invoice.date}</TableCell>
-                        <TableCell>{invoice.customer_name}</TableCell>
-                        <TableCell>₹{invoice.total.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => viewInvoice(invoice)}
-                            >
-                              <Eye className="w-4 h-4 mr-1" /> View
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => downloadInvoice(invoice)}
-                            >
-                              <Download className="w-4 h-4 mr-1" /> Download
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => deleteInvoice(invoice.id)}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <SelectTrigger className="w-[110px] h-8 text-xs rounded-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Paid">
+                      <span className="text-green-600">Paid</span>
+                    </SelectItem>
+                    <SelectItem value="Partial">
+                      <span className="text-yellow-600">Partial</span>
+                    </SelectItem>
+                    <SelectItem value="Unpaid">
+                      <span className="text-red-600">Unpaid</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </TableCell>
+
+              <TableCell className="font-semibold">
+                ₹{invoice.total.toFixed(2)}
+              </TableCell>
+
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="outline">
+                    <Eye className="w-4 h-4 mr-1" /> View
+                  </Button>
+
+                  <Button size="sm" variant="outline">
+                    <Download className="w-4 h-4 mr-1" /> Download
+                  </Button>
+
+                  <Button size="sm" variant="destructive">
+                    Delete
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  </CardContent>
+</Card>
 
         {/* Invoice Preview Dialog */}
         <Dialog open={showPreview} onOpenChange={setShowPreview}>
@@ -299,6 +582,11 @@ const SavedInvoices = () => {
                 sealUrl={sealUrl}
                 signatureUrl={signatureUrl}
                 isPrint={true}
+
+                upiId={upiId}
+                bankName={bankName}
+                accountNumber={accountNumber}
+                ifscCode={ifscCode}
               />
             )}
           </DialogContent>
@@ -313,6 +601,11 @@ const SavedInvoices = () => {
             businessPhone={businessPhone}
             sealUrl={sealUrl}
             signatureUrl={signatureUrl}
+
+            upiId={upiId}
+            bankName={bankName}
+            accountNumber={accountNumber}
+            ifscCode={ifscCode}
             triggerDownload={shouldDownload}
             onComplete={() => setShouldDownload(false)}
           />

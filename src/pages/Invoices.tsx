@@ -18,7 +18,12 @@ import ProductSelector from "@/components/ProductSelector";
 import Navbar from "@/components/Navbar";
 import InvoiceDownload from "@/components/InvoiceDownload";
 import { InventoryProduct } from "@/pages/Inventory";
-
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 export interface InvoiceItem {
   id: string;
   date: string;
@@ -27,6 +32,9 @@ export interface InvoiceItem {
   quantity: number;
   unitPrice: number;
   amount: number;
+
+  variantId?: string;
+  variantDetails?: string; // "M / Black / Nike"
 }
 
 export interface Customer {
@@ -50,8 +58,13 @@ export interface Invoice {
   discountValue: number;
   discountAmount: number;
   total: number;
+
+  // ✅ ADD THESE
+  numberOfDays?: number;
+  paymentStatus?: "Paid" | "Unpaid" | "Partial";
   paymentInstructions: string;
   thankYouNote: string;
+  inclusiveTax: boolean; // ✅ add this
 }
 
 const Invoices = () => {
@@ -65,14 +78,17 @@ const Invoices = () => {
     customer: null,
     items: [],
     subtotal: 0,
-    taxRate: 10,
+    taxRate: 18,
     taxAmount: 0,
     discountType: "percentage",
     discountValue: 0,
     discountAmount: 0,
     total: 0,
+    numberOfDays: 0,
+    paymentStatus: "Unpaid",
     paymentInstructions: "Payment due within 10 days. Thank you for your business!",
     thankYouNote: "Thank you for choosing our services.",
+    inclusiveTax: false,
   });
 
   const [showPreview, setShowPreview] = useState(false);
@@ -134,17 +150,98 @@ const Invoices = () => {
       console.error("Error fetching business name:", error);
     }
   };
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    name: "",
+    email: "",
+    address: "",
+    phone: "",
+  });
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false);
 
+  const handleAddCustomer = async () => {
+    if (!user) return;
+
+    if (!newCustomer.name || !newCustomer.email) {
+      toast({
+        title: "Error",
+        description: "Name and email are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingCustomer(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .insert({
+          user_id: user.id,
+          name: newCustomer.name,
+          email: newCustomer.email,
+          address: newCustomer.address,
+          phone: newCustomer.phone,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // ✅ auto select customer in invoice
+      setInvoice((prev) => ({
+        ...prev,
+        customer: data,
+      }));
+
+      toast({
+        title: "Customer added!",
+        description: "Customer added and selected.",
+      });
+
+      setShowAddCustomer(false);
+      setNewCustomer({ name: "", email: "", address: "", phone: "" });
+
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Error",
+        description: "Failed to add customer",
+        variant: "destructive",
+      });
+    }
+
+    setIsSavingCustomer(false);
+  };
   const calculateTotals = () => {
     const subtotal = invoice.items.reduce((sum, item) => sum + item.amount, 0);
-    const taxAmount = (subtotal * invoice.taxRate) / 100;
+
+    let taxAmount = 0;
+    let total = 0;
+
+    if (invoice.inclusiveTax) {
+      // ✅ Tax already included → don't calculate separately
+      taxAmount = 0;
+      total = subtotal;
+    } else {
+      taxAmount = (subtotal * invoice.taxRate) / 100;
+      total = subtotal + taxAmount;
+    }
+
     const discountAmount =
       invoice.discountType === "percentage"
         ? (subtotal * invoice.discountValue) / 100
         : invoice.discountValue;
 
-    const total = subtotal + taxAmount - discountAmount;
-    setInvoice((prev) => ({ ...prev, subtotal, taxAmount, discountAmount, total }));
+    total = total - discountAmount;
+
+    setInvoice((prev) => ({
+      ...prev,
+      subtotal,
+      taxAmount,
+      discountAmount,
+      total,
+    }));
   };
 
   const addItem = () => {
@@ -169,21 +266,44 @@ const Invoices = () => {
     });
   };
 
-  const handleProductSelect = (product: InventoryProduct, quantity: number) => {
+  const handleProductSelect = (
+    product: InventoryProduct,
+    quantity: number,
+    variant?: any
+  ) => {
+    let description = product.name;
+
+    // Add product description
+    if (product.description) {
+      description += `\n${product.description}`;
+    }
+
+    // ✅ Add variant details (VERY IMPORTANT)
+    if (variant) {
+      description += `\nVariant: ${variant.size} / ${variant.color} / ${variant.brand}`;
+      description += `\nHSN: ${variant.hsn_code}`;
+    }
+
+    const unitPrice = variant?.unit_price ?? product.unit_price;
+
     const newItem: InvoiceItem = {
       id: Date.now().toString(),
       date: new Date().toISOString().split("T")[0],
       orderId: product.sku || "",
-      description: product.name + (product.description ? ` - ${product.description}` : ""),
+      description,
       quantity,
-      unitPrice: product.unit_price,
-      amount: quantity * product.unit_price,
+      unitPrice,
+      amount: quantity * unitPrice,
+      variantId: variant?.id,
+      variantDetails: variant
+        ? `${variant.size} / ${variant.color} / ${variant.brand}`
+        : undefined,
     };
-    setInvoice((prev) => ({ ...prev, items: [...prev.items, newItem] }));
-    toast({
-      title: "Product added!",
-      description: `${product.name} has been added to the invoice.`,
-    });
+
+    setInvoice((prev) => ({
+      ...prev,
+      items: [...prev.items, newItem],
+    }));
   };
 
   const updateItem = (id: string, updatedItem: Partial<InvoiceItem>) => {
@@ -192,12 +312,12 @@ const Invoices = () => {
       items: prev.items.map((item) =>
         item.id === id
           ? {
-              ...item,
-              ...updatedItem,
-              amount:
-                (updatedItem.quantity ?? item.quantity) *
-                (updatedItem.unitPrice ?? item.unitPrice),
-            }
+            ...item,
+            ...updatedItem,
+            amount:
+              (updatedItem.quantity ?? item.quantity) *
+              (updatedItem.unitPrice ?? item.unitPrice),
+          }
           : item
       ),
     }));
@@ -206,7 +326,7 @@ const Invoices = () => {
   const deleteItem = (id: string) => {
     setInvoice((prev) => ({ ...prev, items: prev.items.filter((item) => item.id !== id) }));
   };
-
+  const [selectedProduct, setSelectedProduct] = useState<InventoryProduct | null>(null);
   // 🔐 SAVE INVOICE WITH FULL DATA, ITEMS AS JSON STRING
   const saveInvoice = async () => {
     if (!user) {
@@ -251,6 +371,8 @@ const Invoices = () => {
         business_phone: businessSettings?.business_phone || "",
         seal_url: businessSettings?.seal_url || "",
         signature_url: businessSettings?.signature_url || "",
+        number_of_days: invoice.numberOfDays,
+        payment_status: invoice.paymentStatus,
       };
 
       const { error } = await supabase.from("saved_invoices").insert(invoiceData);
@@ -352,6 +474,42 @@ const Invoices = () => {
                       }
                     />
                   </div>
+                  <div>
+                    <Label htmlFor="date">Number of Days (optional)</Label>
+                    <Input
+
+                      type="number"
+                      value={invoice.numberOfDays}
+                      onChange={(e) =>
+                        setInvoice((prev) => ({
+                          ...prev,
+                          numberOfDays: parseInt(e.target.value) || 0,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="date">Payment Status</Label>
+                    <Select
+                      value={invoice.paymentStatus}
+                      onValueChange={(value: "Paid" | "Unpaid" | "Partial") =>
+                        setInvoice((prev) => ({
+                          ...prev,
+                          paymentStatus: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Paid">Paid</SelectItem>
+                        <SelectItem value="Unpaid">Unpaid</SelectItem>
+                        <SelectItem value="Partial">Partial</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
 
                   {/* Guest Business Name Input */}
                   {!user && (
@@ -375,10 +533,24 @@ const Invoices = () => {
                 <CardTitle>Customer Information</CardTitle>
               </CardHeader>
               <CardContent>
-                <CustomerSelector
-                  selectedCustomer={invoice.customer}
-                  onCustomerSelect={(customer) => setInvoice((prev) => ({ ...prev, customer }))}
-                />
+                <div className="space-y-3">
+                  <CustomerSelector
+                    selectedCustomer={invoice.customer}
+                    onCustomerSelect={(customer) =>
+                      setInvoice((prev) => ({ ...prev, customer }))
+                    }
+                  />
+
+                  {/* ✅ Add Customer Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddCustomer(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add New Customer
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -428,6 +600,23 @@ const Invoices = () => {
 
             {/* Totals */}
             <Card>
+              <div className="flex items-center gap-3 mt-2 p-2 rounded-md hover:bg-gray-50 transition">
+                <input
+                  type="checkbox"
+                  checked={invoice.inclusiveTax}
+                  onChange={(e) =>
+                    setInvoice((prev) => ({
+                      ...prev,
+                      inclusiveTax: e.target.checked,
+                      taxRate: e.target.checked ? 0 : 10,
+                    }))
+                  }
+                  className="w-4 h-4 accent-green-600 cursor-pointer"
+                />
+                <Label className="cursor-pointer text-sm font-medium">
+                  Prices include GST
+                </Label>
+              </div>
               <CardHeader>
                 <CardTitle>Totals & Discounts</CardTitle>
               </CardHeader>
@@ -438,6 +627,7 @@ const Invoices = () => {
                     <Input
                       type="number"
                       value={invoice.taxRate}
+                      disabled={invoice.inclusiveTax} // ✅ disable when inclusive
                       onChange={(e) =>
                         setInvoice((prev) => ({
                           ...prev,
@@ -445,6 +635,11 @@ const Invoices = () => {
                         }))
                       }
                     />
+                    {invoice.inclusiveTax && (
+                      <p className="text-xs text-gray-500">
+                        Tax is already included in prices. Rate is set to 0.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label>Discount Type</Label>
@@ -486,8 +681,32 @@ const Invoices = () => {
                     <span>₹{invoice.subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Tax ({invoice.taxRate}%):</span>
-                    <span>₹{invoice.taxAmount.toFixed(2)}</span>
+                    {/* <span>Tax ({invoice.taxRate}%):</span> */}
+                    <span className="flex items-center gap-2">
+                      <span>
+                        {invoice.inclusiveTax ? "Tax" : `Tax (${invoice.taxRate}%)`}
+                      </span>
+
+                      {invoice.inclusiveTax && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                          Included
+                        </span>
+                      )}
+                    </span>
+
+                    {/* <span>₹{invoice.taxAmount.toFixed(2)}</span> */}
+                    <span className="flex items-center gap-2">
+                      {invoice.inclusiveTax ? (
+                        <>
+                          <span className="text-gray-400">—</span>
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                            Included
+                          </span>
+                        </>
+                      ) : (
+                        <>₹{invoice.taxAmount.toFixed(2)}</>
+                      )}
+                    </span>
                   </div>
                   {invoice.discountAmount > 0 && (
                     <div className="flex justify-between text-red-600">
@@ -547,6 +766,10 @@ const Invoices = () => {
                 businessPhone={businessSettings?.business_phone || ""}
                 sealUrl={businessSettings?.seal_url || ""}
                 signatureUrl={businessSettings?.signature_url || ""}
+                upiId={businessSettings?.upi_id}
+                bankName={businessSettings?.bank_name}
+                accountNumber={businessSettings?.account_number}
+                ifscCode={businessSettings?.ifsc_code}
               />
             </div>
           )}
@@ -558,10 +781,13 @@ const Invoices = () => {
           onOpenChange={setShowBulkUpload}
           onItemsAdd={handleBulkItemsAdd}
         />
+        
         <ProductSelector
           open={showProductSelector}
           onOpenChange={setShowProductSelector}
-          onSelectProduct={handleProductSelect}
+          onSelectProduct={(product, quantity, variant) => {
+            handleProductSelect(product, quantity, variant);
+          }}
         />
 
         {/* Hidden PDF generator */}
@@ -581,8 +807,77 @@ const Invoices = () => {
             });
           }}
         />
+        <Dialog open={showAddCustomer} onOpenChange={setShowAddCustomer}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Add New Customer</DialogTitle>
+    </DialogHeader>
+
+    <div className="space-y-4">
+
+      <div>
+        <Label>Name *</Label>
+        <Input
+          value={newCustomer.name}
+          onChange={(e) =>
+            setNewCustomer({ ...newCustomer, name: e.target.value })
+          }
+        />
+      </div>
+
+      <div>
+        <Label>Email *</Label>
+        <Input
+          type="email"
+          value={newCustomer.email}
+          onChange={(e) =>
+            setNewCustomer({ ...newCustomer, email: e.target.value })
+          }
+        />
+      </div>
+
+      <div>
+        <Label>Phone</Label>
+        <Input
+          value={newCustomer.phone}
+          onChange={(e) =>
+            setNewCustomer({ ...newCustomer, phone: e.target.value })
+          }
+        />
+      </div>
+
+      <div>
+        <Label>Address</Label>
+        <Textarea
+          value={newCustomer.address}
+          onChange={(e) =>
+            setNewCustomer({ ...newCustomer, address: e.target.value })
+          }
+        />
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setShowAddCustomer(false)}
+        >
+          Cancel
+        </Button>
+
+        <Button
+          onClick={handleAddCustomer}
+          disabled={isSavingCustomer}
+        >
+          {isSavingCustomer ? "Saving..." : "Add Customer"}
+        </Button>
       </div>
     </div>
+  </DialogContent>
+</Dialog>
+      </div>
+
+    </div>
+
   );
 };
 

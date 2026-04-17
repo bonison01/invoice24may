@@ -21,6 +21,10 @@ interface BusinessSettings {
   thank_you_note: string;
   seal_url: string;
   signature_url: string;
+  upi_id: string;
+  bank_name: string;
+  account_number: string;
+  ifsc_code: string;
 }
 
 const BusinessSettings = () => {
@@ -34,7 +38,12 @@ const BusinessSettings = () => {
     payment_instructions: 'Payment due within 10 days. Thank you for your business!',
     thank_you_note: 'Thank you for choosing our services.',
     seal_url: '',
-    signature_url: ''
+    signature_url: '',
+    // ✅ NEW
+  upi_id: '',
+  bank_name: '',
+  account_number: '',
+  ifsc_code: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -53,10 +62,10 @@ const BusinessSettings = () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('business_settings')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
+  .from('business_settings')
+.select('*')
+.eq('user_id', user.id)
+.single()
 
       if (error && error.code !== 'PGRST116') {
         throw error;
@@ -71,7 +80,11 @@ const BusinessSettings = () => {
           payment_instructions: data.payment_instructions || 'Payment due within 10 days. Thank you for your business!',
           thank_you_note: data.thank_you_note || 'Thank you for choosing our services.',
           seal_url: data.seal_url || '',
-          signature_url: data.signature_url || ''
+          signature_url: data.signature_url || '',
+          upi_id: data.upi_id || '',
+  bank_name: data.bank_name || '',
+  account_number: data.account_number || '',
+  ifsc_code: data.ifsc_code || '',
         });
       }
     } catch (error) {
@@ -103,6 +116,11 @@ const BusinessSettings = () => {
             thank_you_note: settings.thank_you_note,
             seal_url: settings.seal_url,
             signature_url: settings.signature_url,
+            // ✅ NEW
+  upi_id: settings.upi_id,
+  bank_name: settings.bank_name,
+  account_number: settings.account_number,
+  ifsc_code: settings.ifsc_code,
             updated_at: new Date().toISOString()
           },
           { onConflict: 'user_id' } // ✅ ensure updates instead of no-op
@@ -295,6 +313,49 @@ const BusinessSettings = () => {
                   rows={3}
                 />
               </div>
+              <div className="border-t pt-6 space-y-4">
+  <h3 className="font-semibold text-gray-800">Payment Details</h3>
+
+  {/* UPI */}
+  <div>
+    <Label>UPI ID</Label>
+    <Input
+      value={settings.upi_id}
+      onChange={(e) => handleInputChange("upi_id", e.target.value)}
+      placeholder="example@okaxis"
+    />
+  </div>
+
+  {/* Bank Name */}
+  <div>
+    <Label>Bank Name</Label>
+    <Input
+      value={settings.bank_name}
+      onChange={(e) => handleInputChange("bank_name", e.target.value)}
+      placeholder="State Bank of India"
+    />
+  </div>
+
+  {/* Account Number */}
+  <div>
+    <Label>Account Number</Label>
+    <Input
+      value={settings.account_number}
+      onChange={(e) => handleInputChange("account_number", e.target.value)}
+      placeholder="XXXXXXXXXXXX"
+    />
+  </div>
+
+  {/* IFSC */}
+  <div>
+    <Label>IFSC Code</Label>
+    <Input
+      value={settings.ifsc_code}
+      onChange={(e) => handleInputChange("ifsc_code", e.target.value)}
+      placeholder="SBIN000XXXX"
+    />
+  </div>
+</div>
 
               <div>
                 <Label htmlFor="thank_you_note">Default Thank You Note</Label>

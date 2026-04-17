@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, Package } from "lucide-react";
 import { InventoryProduct } from "@/pages/Inventory";
-import type { InventoryProduct as BaseProduct } from "@/pages/Inventory";
 
 // ✅ Variant type matching what Inventory.tsx stores
 interface VariantRow {
@@ -31,7 +30,6 @@ interface ProductSelectorProps {
   // ✅ Fixed: 3-argument signature with optional variant
   onSelectProduct: (product: InventoryProduct, quantity: number, variant?: VariantRow) => void;
 }
-
 
 const ProductSelector = ({ open, onOpenChange, onSelectProduct }: ProductSelectorProps) => {
   const { user } = useAuth();
@@ -129,8 +127,7 @@ const ProductSelector = ({ open, onOpenChange, onSelectProduct }: ProductSelecto
 
     const { error } = await supabase
       .from("inventory_products")
-      // .update({ variants: JSON.stringify(updated) })
-      .update({ variants: JSON.stringify(updated) } as any)
+      .update({ variants: JSON.stringify(updated) })
       .eq("id", product.id);
 
     if (error) {
@@ -150,20 +147,7 @@ const ProductSelector = ({ open, onOpenChange, onSelectProduct }: ProductSelecto
 
     // ✅ Deduct stock from the selected variant (or base stock if no variants)
     if (selectedVariant) {
-      // await deductVariantStock(selectedProduct, selectedVariant, quantity);
-      // const { error } = await supabase.rpc("deduct_stock", {
-      const { error } = await (supabase as any).rpc("deduct_stock", {
-        p_product_id: selectedProduct.id,
-        p_variant_id: selectedVariant.id,
-        p_quantity: quantity,
-        p_user_id: user.id,
-      });
-
-      if (error) {
-        console.error(error);
-        alert("Stock error: " + error.message);
-        return;
-      }
+      await deductVariantStock(selectedProduct, selectedVariant, quantity);
     } else {
       // No variants — deduct from base current_stock
       const newStock = Math.max(0, selectedProduct.current_stock - quantity);
@@ -317,8 +301,8 @@ const ProductSelector = ({ open, onOpenChange, onSelectProduct }: ProductSelecto
                           ${selectedVariant?.id === v.id
                             ? "bg-primary text-primary-foreground border-primary"
                             : v.stock_quantity === 0
-                              ? "opacity-40 cursor-not-allowed border-muted"
-                              : "hover:bg-muted border-border"
+                            ? "opacity-40 cursor-not-allowed border-muted"
+                            : "hover:bg-muted border-border"
                           }`}
                       >
                         {v.size} / {v.color} / {v.brand}

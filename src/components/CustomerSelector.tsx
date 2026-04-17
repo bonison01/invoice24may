@@ -170,12 +170,12 @@ const CustomerSelector = ({ selectedCustomer, onCustomerSelect }: CustomerSelect
             {isLoading && (
               <p className="text-gray-500 mb-2">Loading customers...</p>
             )}
-            <Button onClick={handleAddCustomer} size="sm" variant="outline">
+            {/* <Button onClick={handleAddCustomer} size="sm" variant="outline">
               <Plus className="w-4 h-4 mr-2" />
               {customers.length === 0
                 ? "Add Your First Customer"
                 : "Add New Customer"}
-            </Button>
+            </Button> */}
           </div>
         </>
       ) : (

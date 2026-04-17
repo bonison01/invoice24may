@@ -10,6 +10,11 @@ interface InvoiceDownloadProps {
   businessPhone?: string;
   sealUrl?: string;
   signatureUrl?: string;
+
+  upiId?: string;
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
   triggerDownload: boolean;
   onComplete: () => void;
 }
@@ -21,6 +26,11 @@ const InvoiceDownload = ({
   businessPhone,
   sealUrl,
   signatureUrl,
+
+  upiId,
+  bankName,
+  accountNumber,
+  ifscCode,
   triggerDownload,
   onComplete,
 }: InvoiceDownloadProps) => {
@@ -102,25 +112,66 @@ const InvoiceDownload = ({
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <div>
-              <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>INVOICE</h1>
-              <p style={{ color: "#555" }}>#{invoice.invoiceNumber}</p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div
-                style={{ fontWeight: "bold", fontSize: "14px" }}
-              >
-                {businessName || "Business Name"}
-              </div>
-              {businessAddress && (
-                <div style={{ whiteSpace: "pre-line", fontSize: "12px" }}>
-                  {businessAddress}
-                </div>
-              )}
-              {businessPhone && <div>{businessPhone}</div>}
-              <div style={{ marginTop: "5px" }}>Date: {invoice.date}</div>
-            </div>
-          </div>
+
+  {/* ✅ LEFT SIDE */}
+  <div>
+    <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>INVOICE</h1>
+
+    <p style={{ color: "#555" }}>#{invoice.invoiceNumber}</p>
+
+    {/* ✅ Due + Status moved here */}
+    <div style={{ marginTop: "6px", fontSize: "12px", color: "#555" }}>
+      {invoice.numberOfDays !== undefined && (
+        <div>Due in: {invoice.numberOfDays} days</div>
+      )}
+
+      {invoice.paymentStatus && (
+        <div style={{ marginTop: "2px" }}>
+          Status:{" "}
+          <span
+            style={{
+              padding: "2px 6px",
+              borderRadius: "4px",
+              fontSize: "10px",
+              backgroundColor:
+                invoice.paymentStatus === "Paid"
+                  ? "#d1fae5"
+                  : invoice.paymentStatus === "Partial"
+                  ? "#fef3c7"
+                  : "#fee2e2",
+              color:
+                invoice.paymentStatus === "Paid"
+                  ? "#065f46"
+                  : invoice.paymentStatus === "Partial"
+                  ? "#92400e"
+                  : "#991b1b",
+            }}
+          >
+            {invoice.paymentStatus}
+          </span>
+        </div>
+      )}
+    </div>
+  </div>
+
+  {/* ✅ RIGHT SIDE */}
+  <div style={{ textAlign: "right" }}>
+    <div style={{ fontWeight: "bold", fontSize: "24px" }}>
+      {businessName || "Business Name"}
+    </div>
+
+    {businessAddress && (
+      <div style={{ whiteSpace: "pre-line", fontSize: "12px" }}>
+        {businessAddress}
+      </div>
+    )}
+
+    {businessPhone && <div>{businessPhone}</div>}
+
+    {/* ✅ ONLY DATE here */}
+    <div style={{ marginTop: "5px" }}>Date: {invoice.date}</div>
+  </div>
+</div>
         </div>
 
         {/* Customer Info */}
@@ -202,7 +253,15 @@ const InvoiceDownload = ({
             Subtotal: ₹{invoice.subtotal.toFixed(2)}
           </div>
           <div style={{ marginBottom: "4px" }}>
-            Tax ({invoice.taxRate}%): ₹{invoice.taxAmount.toFixed(2)}
+            {invoice.inclusiveTax ? (
+              <>
+                Tax (Included): —
+              </>
+            ) : (
+              <>
+                Tax ({invoice.taxRate}%): ₹{invoice.taxAmount.toFixed(2)}
+              </>
+            )}
           </div>
           {invoice.discountAmount > 0 && (
             <div style={{ marginBottom: "4px" }}>
@@ -274,17 +333,25 @@ const InvoiceDownload = ({
                   )}
 
                   <div style={{ marginBottom: "10px" }}>
-                    <h4 style={{ fontWeight: "bold" }}>Payment UPI:</h4>
-                    <p>doeasy01-4@okaxis</p>
+                    {upiId && (
+                      <div style={{ marginBottom: "10px" }}>
+                        <h4 style={{ fontWeight: "bold" }}>Payment UPI:</h4>
+                        <p>{upiId}</p>
+                      </div>
+                    )}
                   </div>
 
                   <div>
-                    <h4 style={{ fontWeight: "bold" }}>Bank Details:</h4>
-                    <p style={{ whiteSpace: "pre-line" }}>
-                      JUSTMATENG SERVICE PRIVATE LIMITED{"\n"}
-                      A/C No: 43261950171{"\n"}
-                      IFSC: SBIN0005320
-                    </p>
+                    {bankName && (
+                      <div>
+                        <h4 style={{ fontWeight: "bold" }}>Bank Details:</h4>
+                        <p style={{ whiteSpace: "pre-line" }}>
+                          {bankName}
+                          {"\n"}A/C No: {accountNumber}
+                          {"\n"}IFSC: {ifscCode}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -329,6 +396,18 @@ const InvoiceDownload = ({
               {invoice.thankYouNote}
             </div>
           )}
+          <div
+            style={{
+              marginTop: "40px",
+              textAlign: "center",
+              fontSize: "10px",
+              color: "#888",
+              borderTop: "1px solid #eee",
+              paddingTop: "10px",
+            }}
+          >
+            This is a computer generated invoice and does not require any signature.
+          </div><br />
         </div>
       </div>
     </div>
