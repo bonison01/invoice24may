@@ -556,9 +556,9 @@ const SavedInvoices = () => {
                     <Download className="w-4 h-4 mr-1" /> Download
                   </Button>
 
-                  <Button size="sm" variant="destructive">
+                  {/* <Button size="sm" variant="destructive">
                     Delete
-                  </Button>
+                  </Button> */}
                 </div>
               </TableCell>
             </TableRow>
