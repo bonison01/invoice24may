@@ -49,7 +49,7 @@ interface VariantRow {
 
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 const COLORS = ["Red", "Green", "Blue", "Black", "White", "Yellow", "Grey", "Brown"];
-const BRANDS = ["Nike", "Adidas", "Puma", "Zara", "H&M", "Unbranded", "Other"];
+const BRANDS = ["Unbranded", "Other"];
 
 const Inventory = () => {
   const { user } = useAuth();
@@ -76,7 +76,20 @@ const Inventory = () => {
     category: "",
     barcode: "",
     hsn_code: "",
-    variants: [] as VariantRow[],
+    // variants: [] as VariantRow[],
+    variants: [
+      {
+        id: Date.now().toString(),
+        size: "M",
+        color: "Black",
+        brand: "Unbranded",
+        stock_quantity: 0,
+        unit_price: 0,
+        cost_price: 0,
+        hsn_code: "",
+        min_stock_level: 0,
+      },
+    ],
   });
 
   useEffect(() => {
@@ -112,7 +125,12 @@ const Inventory = () => {
     }
     setIsLoading(false);
   };
-
+const getTotalVariantStock = () => {
+  return formData.variants.reduce(
+    (sum, v) => sum + (v.stock_quantity || 0),
+    0
+  );
+};
   const fetchLowStockProducts = async () => {
     if (!user) return;
     try {
@@ -125,7 +143,7 @@ const Inventory = () => {
       console.error("Error fetching low stock products:", error);
     }
   };
-const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
+  const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
   const filterProducts = () => {
     let filtered = products;
 
@@ -163,7 +181,8 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
         sku: formData.sku,
         unit_price: parseFloat(formData.unit_price.toString()),
         cost_price: formData.cost_price ? parseFloat(formData.cost_price.toString()) : null,
-        current_stock: parseInt(formData.current_stock.toString()),
+        // current_stock: parseInt(formData.current_stock.toString()),
+        current_stock: getTotalVariantStock(),
         min_stock_level: parseInt(formData.min_stock_level.toString()),
         max_stock_level: formData.max_stock_level ? parseInt(formData.max_stock_level.toString()) : null,
         unit: formData.unit,
@@ -239,7 +258,20 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
       category: "",
       barcode: "",
       hsn_code: "",
-      variants: [],
+      // variants: [],
+      variants: [
+        {
+          id: Date.now().toString(),
+          size: "M",
+          color: "Black",
+          brand: "Unbranded",
+          stock_quantity: 0,
+          unit_price: 0,
+          cost_price: 0,
+          hsn_code: "",
+          min_stock_level: 0,
+        },
+      ],
     });
     setEditingProduct(null);
     setShowAddDialog(false);
@@ -310,21 +342,30 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
   };
 
   const getStockStatus = (product: InventoryProduct) => {
-  const variants = parseVariants(product);
+    const variants = parseVariants(product);
+    const removeVariant = (id: string) => {
+      setFormData((prev) => {
+        if (prev.variants.length === 1) return prev; // ❌ don't remove last
+        return {
+          ...prev,
+          variants: prev.variants.filter((v) => v.id !== id),
+        };
+      });
+    };
 
-  const totalStock = variants.reduce(
-    (sum, v) => sum + (v.stock_quantity || 0),
-    0
-  );
+    const totalStock = variants.reduce(
+      (sum, v) => sum + (v.stock_quantity || 0),
+      0
+    );
 
-  if (totalStock === 0)
-    return { status: "Out of Stock", variant: "destructive" as const };
+    if (totalStock === 0)
+      return { status: "Out of Stock", variant: "destructive" as const };
 
-  if (totalStock <= product.min_stock_level)
-    return { status: "Low Stock", variant: "secondary" as const };
+    if (totalStock <= product.min_stock_level)
+      return { status: "Low Stock", variant: "secondary" as const };
 
-  return { status: "In Stock", variant: "default" as const };
-};
+    return { status: "In Stock", variant: "default" as const };
+  };
 
   const categories = [...new Set(products.map((p) => p.category).filter(Boolean))];
 
@@ -340,7 +381,11 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
             <p className="text-muted-foreground">Manage your products and stock levels</p>
           </div>
           <Button
-            onClick={() => setShowAddDialog(true)}
+            // onClick={() => setShowAddDialog(true)}
+            onClick={() => {
+              resetForm(); // ensures fresh default variant
+              setShowAddDialog(true);
+            }}
             className="bg-gradient-to-r from-green-600 to-yellow-600 hover:from-green-700 hover:to-yellow-700"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -451,7 +496,7 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>SKU</TableHead>
+                      {/* <TableHead>SKU</TableHead> */}
                       <TableHead>Category</TableHead>
                       <TableHead>Variants & Stock</TableHead>
                       <TableHead>Unit Price</TableHead>
@@ -476,20 +521,20 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>{product.sku || "-"}</TableCell>
+                          {/* <TableCell>{product.sku || "-"}</TableCell> */}
                           <TableCell>{product.category || "-"}</TableCell>
                           <TableCell>
                             <div className="text-sm space-y-1">
                               {parsedVariants.length > 0 ? (
                                 <>
                                   {parsedVariants.map((v) => (
-  <Badge
-    key={v.id}
-    variant={v.stock_quantity === 0 ? "destructive" : "default"}
-  >
-    {v.size} {v.color}: {v.stock_quantity}
-  </Badge>
-))}
+                                    <Badge
+                                      key={v.id}
+                                      variant={v.stock_quantity === 0 ? "destructive" : "default"}
+                                    >
+                                      {v.size} {v.color}: {v.stock_quantity}
+                                    </Badge>
+                                  ))}
                                   <div className="text-xs text-muted-foreground mt-1">
                                     Min level: {product.min_stock_level}
                                   </div>
@@ -506,17 +551,17 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
                           </TableCell>
                           {/* <TableCell>₹{product.unit_price.toFixed(2)}</TableCell> */}
                           <TableCell>
-  <div className="text-sm space-y-1">
-    {parsedVariants.map((v) => (
-      <div key={v.id} className="flex justify-between">
-        <span>
-          {v.size} / {v.color}
-        </span>
-        <span>₹{v.unit_price?.toFixed(2) || 0}</span>
-      </div>
-    ))}
-  </div>
-</TableCell>
+                            <div className="text-sm space-y-1">
+                              {parsedVariants.map((v) => (
+                                <div key={v.id} className="flex justify-between">
+                                  <span>
+                                    {v.size} / {v.color}
+                                  </span>
+                                  <span>₹{v.unit_price?.toFixed(2) || 0}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <Badge variant={stockStatus.variant}>{stockStatus.status}</Badge>
                           </TableCell>
@@ -534,8 +579,8 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                               <Button size="sm" onClick={() => setViewProduct(product)}>
-  View
-</Button>
+                                View
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -547,37 +592,37 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
             )}
           </CardContent>
         </Card>
-<Dialog open={!!viewProduct} onOpenChange={() => setViewProduct(null)}>
-  <DialogContent className="max-w-lg">
-    <DialogHeader>
-      <DialogTitle>{viewProduct?.name}</DialogTitle>
-    </DialogHeader>
+        <Dialog open={!!viewProduct} onOpenChange={() => setViewProduct(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{viewProduct?.name}</DialogTitle>
+            </DialogHeader>
 
-    <div className="space-y-3">
-      {viewProduct &&
-        parseVariants(viewProduct).map((v) => (
-          <div
-            key={v.id}
-            className="border p-3 rounded-md flex justify-between"
-          >
-            <div>
-              <div className="font-medium">
-                {v.size} / {v.color} / {v.brand}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                HSN: {v.hsn_code}
-              </div>
-            </div>
+            <div className="space-y-3">
+              {viewProduct &&
+                parseVariants(viewProduct).map((v) => (
+                  <div
+                    key={v.id}
+                    className="border p-3 rounded-md flex justify-between"
+                  >
+                    <div>
+                      <div className="font-medium">
+                        {v.size} / {v.color} / {v.brand}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        HSN: {v.hsn_code}
+                      </div>
+                    </div>
 
-            <div className="text-right">
-              <div>₹{v.unit_price}</div>
-              <div className="text-xs">Stock: {v.stock_quantity}</div>
+                    <div className="text-right">
+                      <div>₹{v.unit_price}</div>
+                      <div className="text-xs">Stock: {v.stock_quantity}</div>
+                    </div>
+                  </div>
+                ))}
             </div>
-          </div>
-        ))}
-    </div>
-  </DialogContent>
-</Dialog>
+          </DialogContent>
+        </Dialog>
         {/* Add/Edit Product Dialog */}
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -600,7 +645,7 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
                   placeholder="Enter product name"
                 />
               </div>
-              <div>
+              {/* <div>
                 <Label htmlFor="sku">SKU</Label>
                 <Input
                   id="sku"
@@ -608,7 +653,7 @@ const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
                   onChange={(e) => setFormData((prev) => ({ ...prev, sku: e.target.value }))}
                   placeholder="Product SKU"
                 />
-              </div>
+              </div> */}
               <div className="md:col-span-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
