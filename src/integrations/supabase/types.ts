@@ -14,6 +14,61 @@ export type Database = {
   }
   public: {
     Tables: {
+      cashbook_entries: {
+  Row: {
+    amount: number
+    category: string
+    created_at: string
+    date: string
+    description: string
+    id: string
+    notes: string | null
+    party_name: string | null
+    payment_method: string
+    reference_number: string | null
+    transaction_date: string
+    type: string
+    updated_at: string
+    user_id: string
+  }
+
+  Insert: {
+    amount: number
+    category: string
+    created_at?: string
+    date: string
+    description: string
+    id?: string
+    notes?: string | null
+    party_name?: string | null
+    payment_method: string
+    reference_number?: string | null
+    transaction_date: string
+    type: string
+    updated_at?: string
+    user_id: string
+  }
+
+  Update: {
+    amount?: number
+    category?: string
+    created_at?: string
+    date?: string
+    description?: string
+    id?: string
+    notes?: string | null
+    party_name?: string | null
+    payment_method?: string
+    reference_number?: string | null
+    transaction_date?: string
+    type?: string
+    updated_at?: string
+    user_id?: string
+  }
+
+  Relationships: []
+},
+
       business_settings: {
         Row: {
           business_address: string | null

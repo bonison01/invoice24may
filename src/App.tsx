@@ -16,6 +16,7 @@ import BusinessSettings from "./pages/BusinessSettings";
 import SavedInvoices from "./pages/SavedInvoices";
 import BulkUpload from "./pages/BulkUpload";
 import Inventory from "./pages/Inventory";
+import Cashbook from "./pages/Cashbook";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
             <Route element={<Layout />}>
               <Route path="/" element={<Index />} />
               <Route path="/invoices" element={<Invoices />} />
+              <Route path="/cashbook" element={<Cashbook />} />
               <Route
                 path="/customers"
                 element={
