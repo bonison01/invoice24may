@@ -83,26 +83,26 @@ const Index = () => {
           </Card>
 
           <Card
-  className="hover:shadow-lg transition-shadow cursor-pointer"
-  onClick={() => navigate('/cashbook')}
->
-  <CardHeader>
-    <CardTitle className="flex items-center gap-2">
-      <FileText className="w-5 h-5" />
-      Cashbook
-    </CardTitle>
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => navigate('/cashbook')}
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Cashbook
+              </CardTitle>
 
-    <CardDescription>
-      Manage income and expense transactions
-    </CardDescription>
-  </CardHeader>
+              <CardDescription>
+                Manage income and expense transactions
+              </CardDescription>
+            </CardHeader>
 
-  <CardContent>
-    <Button className="w-full" variant="outline">
-      Open Cashbook
-    </Button>
-  </CardContent>
-</Card>
+            <CardContent>
+              <Button className="w-full" variant="outline">
+                Open Cashbook
+              </Button>
+            </CardContent>
+          </Card>
 
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/bulk-upload')}>
             <CardHeader>
@@ -189,7 +189,7 @@ const Index = () => {
             </CardContent>
           </Card>
 
-        
+
         </div>
       </div>
     </div>

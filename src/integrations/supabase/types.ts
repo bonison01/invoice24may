@@ -14,6 +14,79 @@ export type Database = {
   }
   public: {
     Tables: {
+
+purchase_invoices: {
+  Row: {
+    id: string;
+    user_id: string;
+    purchase_number: string;
+    date: string;
+    supplier_name: string;
+    supplier_email: string | null;
+    supplier_phone: string | null;
+    supplier_address: string | null;
+    supplier_gstin: string | null;
+    items: string;
+    subtotal: number;
+    tax_rate: number;
+    tax_amount: number;
+    discount: number;
+    total: number;
+    notes: string | null;
+    status: string;
+    payment_status: string;
+    created_at: string;
+  };
+  Insert: {
+    id?: string;
+    user_id: string;
+    purchase_number: string;
+    date: string;
+    supplier_name: string;
+    supplier_email?: string | null;
+    supplier_phone?: string | null;
+    supplier_address?: string | null;
+    supplier_gstin?: string | null;
+    items: string;
+    subtotal: number;
+    tax_rate: number;
+    tax_amount: number;
+    discount: number;
+    total: number;
+    notes?: string | null;
+    status: string;
+    payment_status: string;
+    created_at?: string;
+  };
+  Update: Partial<purchase_invoices['Insert']>;  // adjust as needed
+  Relationships: [];
+};
+
+suppliers: {
+  Row: {
+    id: string;
+    user_id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    gstin: string | null;
+    created_at: string;
+  };
+  Insert: {
+    id?: string;
+    user_id: string;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    gstin?: string | null;
+    created_at?: string;
+  };
+  Update: Partial<suppliers['Insert']>;
+  Relationships: [];
+};
+
       cashbook_entries: {
   Row: {
     amount: number

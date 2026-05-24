@@ -17,6 +17,7 @@ import SavedInvoices from "./pages/SavedInvoices";
 import BulkUpload from "./pages/BulkUpload";
 import Inventory from "./pages/Inventory";
 import Cashbook from "./pages/Cashbook";
+import PurchaseInvoices from "./pages/PurchaseInvoices";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Customers />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/purchase-invoices"
+                element={
+                  <ProtectedRoute>
+                    <PurchaseInvoices />
                   </ProtectedRoute>
                 }
               />

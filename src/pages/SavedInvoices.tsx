@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Eye } from "lucide-react";
+import { ArrowLeft, Download, Eye, Trash2 } from "lucide-react";
 import InvoicePreview from "@/components/InvoicePreview";
 import InvoiceDownload from "@/components/InvoiceDownload";
 import {
@@ -44,9 +44,10 @@ interface SavedInvoice {
   customer_name: string;
   customer_email: string;
   customer_address: string;
+  customer_phone?: string;
   total: number;
   business_name: string;
-  items: any; // string in DB, array after processing
+  items: any;
   subtotal: number;
   tax_rate: number;
   tax_amount: number;
@@ -70,89 +71,29 @@ const SavedInvoices = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [shouldDownload, setShouldDownload] = useState(false);
 
-  const [businessName, setBusinessName] = useState<string>("");
-  const [businessAddress, setBusinessAddress] = useState<string>("");
-  const [businessPhone, setBusinessPhone] = useState<string>("");
-  const [sealUrl, setSealUrl] = useState<string>("");
-  const [signatureUrl, setSignatureUrl] = useState<string>("");
-  const [upiId, setUpiId] = useState<string>("");
-  const [bankName, setBankName] = useState<string>("");
-  const [accountNumber, setAccountNumber] = useState<string>("");
-  const [ifscCode, setIfscCode] = useState<string>("");
-  const updatePaymentStatus = async (
-    invoiceId: string,
-    status: "Paid" | "Unpaid" | "Partial"
-  ) => {
-    try {
-      const { error } = await supabase
-        .from("saved_invoices")
-        .update({ payment_status: status } as any)  // ← add `as any`
-        .eq("id", invoiceId);
+  const [businessName, setBusinessName] = useState("");
+  const [businessAddress, setBusinessAddress] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
+  const [sealUrl, setSealUrl] = useState("");
+  const [signatureUrl, setSignatureUrl] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
 
-      if (error) throw error;
-
-      // ✅ update UI instantly
-      setInvoices((prev) =>
-        prev.map((inv) =>
-          inv.id === invoiceId
-            ? { ...inv, payment_status: status }
-            : inv
-        )
-      );
-
-      toast({
-        title: "Updated",
-        description: `Status changed to ${status}`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update status",
-        variant: "destructive",
-      });
-    }
-  };
-  useEffect(() => {
-    if (user) {
-      fetchBusinessSettings();
-      fetchSavedInvoices();
-    }
-  }, [user]);
-
-  const deleteInvoice = async (invoiceId: string) => {
-    if (!user) return;
-    const confirmed = window.confirm("Are you sure you want to delete this invoice?");
-    if (!confirmed) return;
-
-    try {
-      const { error } = await supabase
-        .from("saved_invoices")
-        .delete()
-        .eq("id", invoiceId)
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Invoice deleted successfully.",
-      });
-
-      setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete invoice.",
-        variant: "destructive",
-      });
-    }
-  };
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [customerFilter, setCustomerFilter] = useState("All");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      fetchBusinessSettings();
+      fetchSavedInvoices();
+    }
+  }, [user]);
 
   const fetchBusinessSettings = async () => {
     if (!user) return;
@@ -164,7 +105,7 @@ const SavedInvoices = () => {
         .single();
       if (error && error.code !== "PGRST116") throw error;
       if (data) {
-        const d = data as any;  // ← add this line
+        const d = data as any;
         setBusinessName(d.business_name || "");
         setBusinessAddress(d.business_address || "");
         setBusinessPhone(d.business_phone || "");
@@ -176,11 +117,7 @@ const SavedInvoices = () => {
         setIfscCode(d.ifsc_code || "");
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load business settings.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to load business settings.", variant: "destructive" });
     }
   };
 
@@ -192,60 +129,98 @@ const SavedInvoices = () => {
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
-
       if (error) throw error;
 
-      const processedData = (data || []).map((invoice: any) => ({
-        ...invoice,
-        items: Array.isArray(invoice.items)
-          ? invoice.items
-          : typeof invoice.items === "string"
-            ? (() => {
-              try {
-                return JSON.parse(invoice.items);
-              } catch {
-                return [];
-              }
-            })()
-            : [],
+      const processed = (data || []).map((inv: any) => ({
+        ...inv,
+        items: Array.isArray(inv.items)
+          ? inv.items
+          : typeof inv.items === "string"
+          ? (() => { try { return JSON.parse(inv.items); } catch { return []; } })()
+          : [],
       }));
-
-      setInvoices(processedData as SavedInvoice[]);
+      setInvoices(processed as SavedInvoice[]);
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load saved invoices.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to load saved invoices.", variant: "destructive" });
     }
   };
 
-  const convertToInvoice = (savedInvoice: SavedInvoice): Invoice => ({
-    id: savedInvoice.id,
-    invoiceNumber: savedInvoice.invoice_number,
-    date: savedInvoice.date,
+  const updatePaymentStatus = async (invoiceId: string, status: "Paid" | "Unpaid" | "Partial") => {
+    try {
+      const { error } = await supabase
+        .from("saved_invoices")
+        .update({ payment_status: status } as any)
+        .eq("id", invoiceId);
+      if (error) throw error;
+      setInvoices((prev) =>
+        prev.map((inv) => inv.id === invoiceId ? { ...inv, payment_status: status } : inv)
+      );
+      toast({ title: "Updated", description: `Status changed to ${status}` });
+    } catch {
+      toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+    }
+  };
+
+  const deleteInvoice = async (invoiceId: string) => {
+    if (!user) return;
+    const confirmed = window.confirm("Are you sure you want to delete this invoice?");
+    if (!confirmed) return;
+    try {
+      const { error } = await supabase
+        .from("saved_invoices")
+        .delete()
+        .eq("id", invoiceId)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      toast({ title: "Deleted", description: "Invoice deleted successfully." });
+      setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+    } catch {
+      toast({ title: "Error", description: "Failed to delete invoice.", variant: "destructive" });
+    }
+  };
+
+  // Convert saved invoice → Invoice type (with all new per-item fields preserved)
+  const convertToInvoice = (saved: SavedInvoice): Invoice => ({
+    id: saved.id,
+    invoiceNumber: saved.invoice_number,
+    date: saved.date,
     customer: {
       id: "",
-      name: savedInvoice.customer_name,
-      email: savedInvoice.customer_email,
-      address: savedInvoice.customer_address,
+      name: saved.customer_name,
+      email: saved.customer_email,
+      address: saved.customer_address,
+      phone: saved.customer_phone,
     },
-    items: savedInvoice.items || [],
-    subtotal: savedInvoice.subtotal,
-    taxRate: savedInvoice.tax_rate,
-    taxAmount: savedInvoice.tax_amount,
-
-    // ✅ ADD THIS (IMPORTANT)
-    inclusiveTax: savedInvoice.tax_rate === 0,
-
+    // items already parsed — per-item fields (hsnCode, itemDiscountAmount, etc.) pass through as-is
+    items: (saved.items || []).map((item: any) => ({
+      id: item.id ?? "",
+      date: item.date ?? "",
+      orderId: item.orderId ?? "",
+      description: item.description ?? "",
+      quantity: item.quantity ?? 1,
+      unitPrice: item.unitPrice ?? 0,
+      amount: item.amount ?? ((item.quantity ?? 0) * (item.unitPrice ?? 0)),
+      hsnCode: item.hsnCode ?? "",
+      itemTaxRate: item.itemTaxRate ?? 0,
+      itemDiscountType: item.itemDiscountType ?? "flat",
+      itemDiscountValue: item.itemDiscountValue ?? 0,
+      itemDiscountAmount: item.itemDiscountAmount ?? 0,
+      itemTaxAmount: item.itemTaxAmount ?? 0,
+      variantId: item.variantId,
+      variantDetails: item.variantDetails,
+    })),
+    subtotal: saved.subtotal,
+    taxRate: saved.tax_rate,
+    taxAmount: saved.tax_amount,
+    inclusiveTax: saved.tax_rate === 0,
     discountType: "fixed",
-    discountValue: savedInvoice.discount,
-    discountAmount: savedInvoice.discount,
-    total: savedInvoice.total,
-    paymentInstructions: savedInvoice.payment_instructions || "",
-    thankYouNote: savedInvoice.thank_you_note || "",
-    numberOfDays: savedInvoice.number_of_days || 0,
-    paymentStatus: savedInvoice.payment_status || "Unpaid",
+    discountValue: saved.discount,
+    discountAmount: saved.discount,
+    total: saved.total,
+    paymentInstructions: saved.payment_instructions || "",
+    thankYouNote: saved.thank_you_note || "",
+    numberOfDays: saved.number_of_days || 0,
+    paymentStatus: saved.payment_status || "Unpaid",
   });
 
   const viewInvoice = (invoice: SavedInvoice) => {
@@ -257,162 +232,81 @@ const SavedInvoices = () => {
     setSelectedInvoice(convertToInvoice(invoice));
     setShouldDownload(true);
   };
+
   const filteredInvoices = invoices.filter((invoice) => {
-    // 🔍 Search (invoice # or customer)
     const matchesSearch =
       invoice.invoice_number.toLowerCase().includes(search.toLowerCase()) ||
       invoice.customer_name.toLowerCase().includes(search.toLowerCase());
-
-    // 📊 Status filter
-    const matchesStatus =
-      statusFilter === "All" ||
-      invoice.payment_status === statusFilter;
-
-    // 👤 Customer filter
-    const matchesCustomer =
-      customerFilter === "All" ||
-      invoice.customer_name === customerFilter;
-
-    // 📅 Date range
+    const matchesStatus = statusFilter === "All" || invoice.payment_status === statusFilter;
+    const matchesCustomer = customerFilter === "All" || invoice.customer_name === customerFilter;
     const invoiceDate = new Date(invoice.date);
     const matchesFrom = fromDate ? invoiceDate >= new Date(fromDate) : true;
     const matchesTo = toDate ? invoiceDate <= new Date(toDate) : true;
-
-    // ⏰ Overdue logic
     const isOverdue =
       invoice.number_of_days &&
-      new Date(invoice.date).getTime() +
-      invoice.number_of_days * 86400000 <
-      Date.now();
-
+      new Date(invoice.date).getTime() + invoice.number_of_days * 86400000 < Date.now();
     const matchesOverdue = overdueOnly ? isOverdue : true;
-
-    return (
-      matchesSearch &&
-      matchesStatus &&
-      matchesCustomer &&
-      matchesFrom &&
-      matchesTo &&
-      matchesOverdue
-    );
+    return matchesSearch && matchesStatus && matchesCustomer && matchesFrom && matchesTo && matchesOverdue;
   });
+
   const totalSales = filteredInvoices.reduce((s, i) => s + i.total, 0);
-
-  const totalPaid = filteredInvoices.reduce(
-    (s, i) => s + (i.payment_status === "Paid" ? i.total : 0),
-    0
-  );
-
-  const totalPending = filteredInvoices.reduce(
-    (s, i) => s + (i.payment_status !== "Paid" ? i.total : 0),
-    0
-  );
-
+  const totalPaid = filteredInvoices.reduce((s, i) => s + (i.payment_status === "Paid" ? i.total : 0), 0);
+  const totalPending = filteredInvoices.reduce((s, i) => s + (i.payment_status !== "Paid" ? i.total : 0), 0);
   const totalOverdues = filteredInvoices.filter(
-    (i) =>
-      i.number_of_days &&
-      new Date(i.date).getTime() +
-      i.number_of_days * 86400000 <
-      Date.now()
+    (i) => i.number_of_days && new Date(i.date).getTime() + i.number_of_days * 86400000 < Date.now()
   ).length;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-purple-50">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-8">
-          {/* 🔥 SUMMARY CARDS */}
 
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Saved Invoices
-              </h1>
-              <p className="text-gray-500">
-                Manage and track all your invoices
-              </p>
-            </div>
-
-            <Button onClick={() => navigate("/")} variant="outline">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Dashboard
-            </Button>
-
-
+        {/* ── Page Header ── */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Saved Invoices</h1>
+            <p className="text-gray-500">Manage and track all your invoices</p>
           </div>
+          <Button onClick={() => navigate("/")} variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" /> Dashboard
+          </Button>
         </div>
 
-        {/* 🔥 SUMMARY CARDS */}
+        {/* ── Summary Cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-
-          <Card className="shadow-sm hover:shadow-md transition rounded-xl">
-            <CardContent className="p-4">
-              <p className="text-xs text-gray-500">Total Sales</p>
-              <p className="text-xl font-bold text-gray-900">
-                ₹{totalSales.toFixed(2)}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm hover:shadow-md transition rounded-xl">
-            <CardContent className="p-4">
-              <p className="text-xs text-gray-500">Paid</p>
-              <p className="text-xl font-bold text-green-600">
-                ₹{totalPaid.toFixed(2)}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm hover:shadow-md transition rounded-xl">
-            <CardContent className="p-4">
-              <p className="text-xs text-gray-500">Pending</p>
-              <p className="text-xl font-bold text-yellow-600">
-                ₹{totalPending.toFixed(2)}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm hover:shadow-md transition rounded-xl">
-            <CardContent className="p-4">
-              <p className="text-xs text-gray-500">Overdues</p>
-              <p className="text-xl font-bold text-red-600">
-                {totalOverdues}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm hover:shadow-md transition rounded-xl">
-            <CardContent className="p-4">
-              <p className="text-xs text-gray-500">Invoices</p>
-              <p className="text-xl font-bold text-gray-900">
-                {filteredInvoices.length}
-              </p>
-            </CardContent>
-          </Card>
-
+          {[
+            { label: "Total Sales", value: `₹${totalSales.toFixed(2)}`, color: "text-gray-900" },
+            { label: "Paid", value: `₹${totalPaid.toFixed(2)}`, color: "text-green-600" },
+            { label: "Pending", value: `₹${totalPending.toFixed(2)}`, color: "text-yellow-600" },
+            { label: "Overdues", value: String(totalOverdues), color: "text-red-600" },
+            { label: "Invoices", value: String(filteredInvoices.length), color: "text-gray-900" },
+          ].map(({ label, value, color }) => (
+            <Card key={label} className="shadow-sm hover:shadow-md transition rounded-xl">
+              <CardContent className="p-4">
+                <p className="text-xs text-gray-500">{label}</p>
+                <p className={`text-xl font-bold ${color}`}>{value}</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        {/* 🔥 FILTERS */}
+        {/* ── Filters ── */}
         <div className="bg-white border rounded-xl p-4 mb-6 shadow-sm flex flex-wrap gap-4 items-end">
-
-          {/* Search */}
           <div className="flex flex-col">
             <label className="text-xs text-gray-500 mb-1">Search</label>
             <input
               type="text"
-              placeholder="Invoice or customer"
+              placeholder="Invoice # or customer"
               className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
 
-          {/* Status */}
           <div>
-            <label className="text-xs text-gray-500">Status</label>
+            <label className="text-xs text-gray-500 block mb-1">Status</label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[130px] mt-1">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All</SelectItem>
                 <SelectItem value="Paid">Paid</SelectItem>
@@ -422,61 +316,43 @@ const SavedInvoices = () => {
             </Select>
           </div>
 
-          {/* Customer */}
           <div>
-            <label className="text-xs text-gray-500">Customer</label>
+            <label className="text-xs text-gray-500 block mb-1">Customer</label>
             <Select value={customerFilter} onValueChange={setCustomerFilter}>
-              <SelectTrigger className="w-[150px] mt-1">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All</SelectItem>
-                {[...new Set(invoices.map(i => i.customer_name))].map(name => (
+                {[...new Set(invoices.map((i) => i.customer_name))].map((name) => (
                   <SelectItem key={name} value={name}>{name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Dates */}
-          <input
-            type="date"
-            className="border rounded-md px-3 py-2 text-sm"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-          />
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-500 mb-1">From</label>
+            <input type="date" className="border rounded-md px-3 py-2 text-sm" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </div>
 
-          <input
-            type="date"
-            className="border rounded-md px-3 py-2 text-sm"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-          />
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-500 mb-1">To</label>
+            <input type="date" className="border rounded-md px-3 py-2 text-sm" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </div>
 
-          {/* Overdue */}
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={overdueOnly}
-              onChange={(e) => setOverdueOnly(e.target.checked)}
-            />
-            Overdue
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
+            Overdue only
           </label>
 
-          {/* Reset */}
           <Button variant="ghost" onClick={() => {
-            setSearch("");
-            setStatusFilter("All");
-            setCustomerFilter("All");
-            setFromDate("");
-            setToDate("");
-            setOverdueOnly(false);
+            setSearch(""); setStatusFilter("All"); setCustomerFilter("All");
+            setFromDate(""); setToDate(""); setOverdueOnly(false);
           }}>
             Reset
           </Button>
         </div>
 
-        {/* 🔥 TABLE CARD */}
+        {/* ── Table ── */}
         <Card className="shadow-sm rounded-xl">
           <CardHeader>
             <CardTitle>Your Invoices</CardTitle>
@@ -484,7 +360,6 @@ const SavedInvoices = () => {
               {filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? "s" : ""}
             </CardDescription>
           </CardHeader>
-
           <CardContent>
             <div className="overflow-x-auto">
               <Table>
@@ -499,77 +374,79 @@ const SavedInvoices = () => {
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
-
                 <TableBody>
-                  {filteredInvoices.map((invoice) => (
-                    <TableRow key={invoice.id} className="hover:bg-gray-50 transition">
-                      <TableCell className="font-medium">
-                        {invoice.invoice_number}
-                      </TableCell>
-
-                      <TableCell>{invoice.date}</TableCell>
-
-                      <TableCell>{invoice.customer_name}</TableCell>
-
-                      <TableCell>
-                        {invoice.number_of_days
-                          ? `${invoice.number_of_days} days`
-                          : <span className="text-gray-400">—</span>}
-                      </TableCell>
-
-                      <TableCell>
-                        <Select
-                          value={invoice.payment_status ?? "Unpaid"}
-                          onValueChange={(value) =>
-                            updatePaymentStatus(invoice.id, value as "Paid" | "Unpaid" | "Partial")
-                          }
-                        >
-                          <SelectTrigger className="w-[110px] h-8 text-xs rounded-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Paid">
-                              <span className="text-green-600">Paid</span>
-                            </SelectItem>
-                            <SelectItem value="Partial">
-                              <span className="text-yellow-600">Partial</span>
-                            </SelectItem>
-                            <SelectItem value="Unpaid">
-                              <span className="text-red-600">Unpaid</span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-
-                      <TableCell className="font-semibold">
-                        ₹{invoice.total.toFixed(2)}
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-
-                          <Button size="sm" variant="outline" onClick={() => viewInvoice(invoice)}>
-                            <Eye className="w-4 h-4 mr-1" /> View
-                          </Button>
-
-                          <Button size="sm" variant="outline" onClick={() => downloadInvoice(invoice)}>
-                            <Download className="w-4 h-4 mr-1" /> Download
-                          </Button>
-
-                          {/* <Button size="sm" variant="destructive">
-                    Delete
-                  </Button> */}
-                        </div>
+                  {filteredInvoices.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-12 text-gray-400">
+                        No invoices found.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    filteredInvoices.map((invoice) => {
+                      const isOverdue =
+                        invoice.number_of_days &&
+                        new Date(invoice.date).getTime() + invoice.number_of_days * 86400000 < Date.now() &&
+                        invoice.payment_status !== "Paid";
+
+                      return (
+                        <TableRow key={invoice.id} className={`hover:bg-gray-50 transition ${isOverdue ? "bg-red-50" : ""}`}>
+                          <TableCell className="font-medium">
+                            {invoice.invoice_number}
+                            {isOverdue && (
+                              <span className="ml-2 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Overdue</span>
+                            )}
+                          </TableCell>
+                          <TableCell>{invoice.date}</TableCell>
+                          <TableCell>{invoice.customer_name}</TableCell>
+                          <TableCell>
+                            {invoice.number_of_days
+                              ? `${invoice.number_of_days} days`
+                              : <span className="text-gray-400">—</span>}
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={invoice.payment_status ?? "Unpaid"}
+                              onValueChange={(v) => updatePaymentStatus(invoice.id, v as "Paid" | "Unpaid" | "Partial")}
+                            >
+                              <SelectTrigger className={`w-[110px] h-8 text-xs rounded-full ${
+                                invoice.payment_status === "Paid" ? "border-green-200 text-green-700"
+                                : invoice.payment_status === "Partial" ? "border-yellow-200 text-yellow-700"
+                                : "border-red-200 text-red-600"
+                              }`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Paid"><span className="text-green-600">Paid</span></SelectItem>
+                                <SelectItem value="Partial"><span className="text-yellow-600">Partial</span></SelectItem>
+                                <SelectItem value="Unpaid"><span className="text-red-600">Unpaid</span></SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="font-semibold">₹{invoice.total.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="outline" onClick={() => viewInvoice(invoice)}>
+                                <Eye className="w-4 h-4 mr-1" /> View
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => downloadInvoice(invoice)}>
+                                <Download className="w-4 h-4 mr-1" /> Download
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => deleteInvoice(invoice.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </div>
           </CardContent>
         </Card>
 
-        {/* Invoice Preview Dialog */}
+        {/* ── Preview Dialog ── */}
         <Dialog open={showPreview} onOpenChange={setShowPreview}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader />
@@ -582,7 +459,6 @@ const SavedInvoices = () => {
                 sealUrl={sealUrl}
                 signatureUrl={signatureUrl}
                 isPrint={true}
-
                 upiId={upiId}
                 bankName={bankName}
                 accountNumber={accountNumber}
@@ -592,7 +468,7 @@ const SavedInvoices = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Hidden PDF generator */}
+        {/* ── Hidden PDF Generator ── */}
         {selectedInvoice && (
           <InvoiceDownload
             invoice={selectedInvoice}
@@ -601,7 +477,6 @@ const SavedInvoices = () => {
             businessPhone={businessPhone}
             sealUrl={sealUrl}
             signatureUrl={signatureUrl}
-
             upiId={upiId}
             bankName={bankName}
             accountNumber={accountNumber}
