@@ -4,9 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { CompanyProvider } from "@/hooks/useCompany";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Layout from "@/Layout";
+import RoleGuard from "@/components/RoleGuard";
 
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -18,77 +20,88 @@ import BulkUpload from "./pages/BulkUpload";
 import Inventory from "./pages/Inventory";
 import Cashbook from "./pages/Cashbook";
 import PurchaseInvoices from "./pages/PurchaseInvoices";
+import TeamSettings from "./pages/TeamSettings";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            {/* Auth route does NOT include navbar */}
-            <Route path="/auth" element={<Auth />} />
+      <CompanyProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              {/* Auth — no layout */}
+              <Route path="/auth" element={<Auth />} />
 
-            {/* All other routes go through Layout */}
-            <Route element={<Layout />}>
-              <Route path="/" element={<Index />} />
-              <Route path="/invoices" element={<Invoices />} />
-              <Route path="/cashbook" element={<Cashbook />} />
-              <Route
-                path="/customers"
-                element={
+              {/* All other routes through Layout */}
+              <Route element={<Layout />}>
+                <Route path="/" element={<Index />} />
+
+                <Route path="/invoices" element={
+                  <RoleGuard section="invoices">
+                    <Invoices />
+                  </RoleGuard>
+                } />
+
+                <Route path="/cashbook" element={
+                  <RoleGuard section="cashbook">
+                    <Cashbook />
+                  </RoleGuard>
+                } />
+
+                <Route path="/customers" element={
                   <ProtectedRoute>
-                    <Customers />
+                    <RoleGuard section="customers">
+                      <Customers />
+                    </RoleGuard>
                   </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/purchase-invoices"
-                element={
+                } />
+
+                <Route path="/inventory" element={
+                  <ProtectedRoute>
+                    <RoleGuard section="inventory">
+                      <Inventory />
+                    </RoleGuard>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/purchase-invoices" element={
                   <ProtectedRoute>
                     <PurchaseInvoices />
                   </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/business-settings"
-                element={
+                } />
+
+                <Route path="/business-settings" element={
                   <ProtectedRoute>
                     <BusinessSettings />
                   </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/saved-invoices"
-                element={
+                } />
+
+                <Route path="/saved-invoices" element={
                   <ProtectedRoute>
                     <SavedInvoices />
                   </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/bulk-upload"
-                element={
+                } />
+
+                <Route path="/bulk-upload" element={
                   <ProtectedRoute>
                     <BulkUpload />
                   </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/inventory"
-                element={
+                } />
+
+                <Route path="/team-settings" element={
                   <ProtectedRoute>
-                    <Inventory />
+                    <TeamSettings />
                   </ProtectedRoute>
-                }
-              />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+                } />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </CompanyProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

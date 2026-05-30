@@ -16,6 +16,9 @@ import {
   Wallet, Download, Calendar, Filter,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
+import { useCompany } from "@/hooks/useCompany";
+import { Building2 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +65,8 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "card", label: "Card" },
   { value: "other", label: "Other" },
 ];
+const ownerId = useActiveOwnerId();
+const { activeCompany } = useCompany();
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -118,29 +123,28 @@ const Cashbook = () => {
   };
   const [formData, setFormData] = useState(blankForm);
 
-  useEffect(() => { if (user) fetchEntries(); }, [user]);
+  // useEffect(() => { if (user) fetchEntries(); }, [user]);
+  useEffect(() => { if (ownerId) fetchEntries(); }, [ownerId]);
   useEffect(() => { applyFilters(); }, [entries, searchTerm, typeFilter, categoryFilter, methodFilter, dateFrom, dateTo]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
 
   const fetchEntries = async () => {
-    if (!user) return;
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("cashbook_entries")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("transaction_date", { ascending: false });
-        console.log(data);
-console.log(error);
-      if (error) throw error;
-      setEntries(data || []);
-    } catch {
-      toast({ title: "Error", description: "Failed to fetch cashbook entries.", variant: "destructive" });
-    }
-    setIsLoading(false);
-  };
+  if (!ownerId) return;
+  setIsLoading(true);
+  try {
+    const { data, error } = await supabase
+      .from("cashbook_entries")
+      .select("*")
+      .eq("user_id", ownerId)
+      .order("transaction_date", { ascending: false });
+    if (error) throw error;
+    setEntries(data || []);
+  } catch {
+    toast({ title: "Error", description: "Failed to fetch cashbook entries.", variant: "destructive" });
+  }
+  setIsLoading(false);
+};
 
   // ── Filtering ─────────────────────────────────────────────────────────────
 
@@ -175,7 +179,7 @@ console.log(error);
 
     try {
       const payload = {
-  user_id: user.id,
+  user_id: ownerId,
 
   type: formData.type,
 
@@ -590,6 +594,14 @@ console.log(error);
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {activeCompany && !activeCompany.isOwn && (
+  <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+    <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
+    <p className="text-sm font-semibold text-blue-800">
+      Viewing: {activeCompany.companyName} — Role: {activeCompany.role}
+    </p>
+  </div>
+)}
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Upload, X } from "lucide-react";
+import { ArrowLeft, Save, Upload, X, Users2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 
 interface BusinessSettings {
@@ -40,10 +40,10 @@ const BusinessSettings = () => {
     seal_url: '',
     signature_url: '',
     // ✅ NEW
-  upi_id: '',
-  bank_name: '',
-  account_number: '',
-  ifsc_code: '',
+    upi_id: '',
+    bank_name: '',
+    account_number: '',
+    ifsc_code: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -62,10 +62,10 @@ const BusinessSettings = () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-  .from('business_settings')
-.select('*')
-.eq('user_id', user.id)
-.single()
+        .from('business_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
 
       if (error && error.code !== 'PGRST116') {
         throw error;
@@ -82,9 +82,9 @@ const BusinessSettings = () => {
           seal_url: data.seal_url || '',
           signature_url: data.signature_url || '',
           upi_id: data.upi_id || '',
-  bank_name: data.bank_name || '',
-  account_number: data.account_number || '',
-  ifsc_code: data.ifsc_code || '',
+          bank_name: data.bank_name || '',
+          account_number: data.account_number || '',
+          ifsc_code: data.ifsc_code || '',
         });
       }
     } catch (error) {
@@ -117,10 +117,10 @@ const BusinessSettings = () => {
             seal_url: settings.seal_url,
             signature_url: settings.signature_url,
             // ✅ NEW
-  upi_id: settings.upi_id,
-  bank_name: settings.bank_name,
-  account_number: settings.account_number,
-  ifsc_code: settings.ifsc_code,
+            upi_id: settings.upi_id,
+            bank_name: settings.bank_name,
+            account_number: settings.account_number,
+            ifsc_code: settings.ifsc_code,
             updated_at: new Date().toISOString()
           },
           { onConflict: 'user_id' } // ✅ ensure updates instead of no-op
@@ -252,6 +252,20 @@ const BusinessSettings = () => {
         </div>
 
         <div className="max-w-2xl mx-auto">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/team-settings')}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users2 className="w-5 h-5" />
+                Team & Roles
+              </CardTitle>
+              <CardDescription>
+                Grant teammates access to your data
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" variant="outline">Manage Team</Button>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Business Information</CardTitle>
@@ -314,48 +328,48 @@ const BusinessSettings = () => {
                 />
               </div>
               <div className="border-t pt-6 space-y-4">
-  <h3 className="font-semibold text-gray-800">Payment Details</h3>
+                <h3 className="font-semibold text-gray-800">Payment Details</h3>
 
-  {/* UPI */}
-  <div>
-    <Label>UPI ID</Label>
-    <Input
-      value={settings.upi_id}
-      onChange={(e) => handleInputChange("upi_id", e.target.value)}
-      placeholder="example@okaxis"
-    />
-  </div>
+                {/* UPI */}
+                <div>
+                  <Label>UPI ID</Label>
+                  <Input
+                    value={settings.upi_id}
+                    onChange={(e) => handleInputChange("upi_id", e.target.value)}
+                    placeholder="example@okaxis"
+                  />
+                </div>
 
-  {/* Bank Name */}
-  <div>
-    <Label>Bank Name</Label>
-    <Input
-      value={settings.bank_name}
-      onChange={(e) => handleInputChange("bank_name", e.target.value)}
-      placeholder="State Bank of India"
-    />
-  </div>
+                {/* Bank Name */}
+                <div>
+                  <Label>Bank Name</Label>
+                  <Input
+                    value={settings.bank_name}
+                    onChange={(e) => handleInputChange("bank_name", e.target.value)}
+                    placeholder="State Bank of India"
+                  />
+                </div>
 
-  {/* Account Number */}
-  <div>
-    <Label>Account Number</Label>
-    <Input
-      value={settings.account_number}
-      onChange={(e) => handleInputChange("account_number", e.target.value)}
-      placeholder="XXXXXXXXXXXX"
-    />
-  </div>
+                {/* Account Number */}
+                <div>
+                  <Label>Account Number</Label>
+                  <Input
+                    value={settings.account_number}
+                    onChange={(e) => handleInputChange("account_number", e.target.value)}
+                    placeholder="XXXXXXXXXXXX"
+                  />
+                </div>
 
-  {/* IFSC */}
-  <div>
-    <Label>IFSC Code</Label>
-    <Input
-      value={settings.ifsc_code}
-      onChange={(e) => handleInputChange("ifsc_code", e.target.value)}
-      placeholder="SBIN000XXXX"
-    />
-  </div>
-</div>
+                {/* IFSC */}
+                <div>
+                  <Label>IFSC Code</Label>
+                  <Input
+                    value={settings.ifsc_code}
+                    onChange={(e) => handleInputChange("ifsc_code", e.target.value)}
+                    placeholder="SBIN000XXXX"
+                  />
+                </div>
+              </div>
 
               <div>
                 <Label htmlFor="thank_you_note">Default Thank You Note</Label>

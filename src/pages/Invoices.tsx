@@ -24,6 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
+import { useCompany } from "@/hooks/useCompany";
+import { Building2 } from "lucide-react";
 
 export interface InvoiceItem {
   id: string;
@@ -108,32 +111,45 @@ const Invoices = () => {
   const [newCustomer, setNewCustomer] = useState({ name: "", email: "", address: "", phone: "" });
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
 
+  const ownerId = useActiveOwnerId();
+const { activeCompany } = useCompany();
+
   useEffect(() => { calculateTotals(); }, [invoice.items, invoice.taxRate, invoice.discountType, invoice.discountValue, invoice.inclusiveTax]);
-  useEffect(() => { if (user) { fetchBusinessSettings(); fetchBusinessName(); } }, [user]);
+  // useEffect(() => { if (user) { fetchBusinessSettings(); fetchBusinessName(); } }, [user]);
+  useEffect(() => { if (ownerId) { fetchBusinessSettings(); fetchBusinessName(); } }, [ownerId]);
+
 
   const fetchBusinessSettings = async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase.from("business_settings").select("*").eq("user_id", user.id).single();
-      if (error && error.code !== "PGRST116") throw error;
-      if (data) {
-        setBusinessSettings(data);
-        setInvoice((prev) => ({
-          ...prev,
-          paymentInstructions: data.payment_instructions || prev.paymentInstructions,
-          thankYouNote: data.thank_you_note || prev.thankYouNote,
-        }));
-      }
-    } catch (error) { console.error("Error fetching business settings:", error); }
-  };
+  if (!ownerId) return;
+  try {
+    const { data, error } = await (supabase as any)
+      .from("business_settings")
+      .select("*")
+      .eq("user_id", ownerId)
+      .single();
+    if (error && error.code !== "PGRST116") throw error;
+    if (data) {
+      setBusinessSettings(data);
+      setInvoice((prev) => ({
+        ...prev,
+        paymentInstructions: data.payment_instructions || prev.paymentInstructions,
+        thankYouNote: data.thank_you_note || prev.thankYouNote,
+      }));
+    }
+  } catch { console.error("Error fetching business settings"); }
+};
 
   const fetchBusinessName = async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase.from("business_settings").select("business_name").eq("user_id", user.id).single();
-      if (data && !error) setBusinessName(data.business_name);
-    } catch (error) { console.error("Error fetching business name:", error); }
-  };
+  if (!ownerId) return;
+  try {
+    const { data, error } = await supabase
+      .from("business_settings")
+      .select("business_name")
+      .eq("user_id", ownerId)
+      .single();
+    if (data && !error) setBusinessName(data.business_name);
+  } catch { console.error("Error fetching business name"); }
+};
 
   const handleAddCustomer = async () => {
     if (!user) return;
@@ -143,7 +159,7 @@ const Invoices = () => {
     }
     setIsSavingCustomer(true);
     try {
-      const { data, error } = await supabase.from("customers").insert({ user_id: user.id, ...newCustomer }).select().single();
+      const { data, error } = await supabase.from("customers").insert({ user_id: ownerId, ...newCustomer }).select().single();
       if (error) throw error;
       setInvoice((prev) => ({ ...prev, customer: data }));
       toast({ title: "Customer added!", description: "Customer added and selected." });
@@ -249,7 +265,7 @@ const Invoices = () => {
     setIsLoading(true);
     try {
       const invoiceData = {
-        user_id: user.id,
+        user_id: ownerId,
         invoice_number: invoice.invoiceNumber,
         date: invoice.date,
         customer_name: invoice.customer?.name || "",
@@ -873,6 +889,13 @@ const Invoices = () => {
           </div>
         )}
       </div>
+{activeCompany && !activeCompany.isOwn && (
+  <div className="flex items-center gap-2 text-xs bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
+    <Building2 className="w-3.5 h-3.5 text-blue-600" />
+    <span className="text-blue-700 font-medium">{activeCompany.companyName}</span>
+    <span className="text-blue-500 capitalize">({activeCompany.role})</span>
+  </div>
+)}
 
       {/* ── Dialogs ── */}
       <BulkUploadDialog open={showBulkUpload} onOpenChange={setShowBulkUpload} onItemsAdd={handleBulkItemsAdd} />
@@ -925,6 +948,7 @@ const Invoices = () => {
         </DialogContent>
       </Dialog>
     </div>
+    
   );
 };
 

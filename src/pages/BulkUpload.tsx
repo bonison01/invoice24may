@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Upload, Download } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
 
 const BulkUpload = () => {
   const navigate = useNavigate();
@@ -29,6 +30,10 @@ const BulkUpload = () => {
       });
     }
   };
+  // Inside component add:
+const ownerId = useActiveOwnerId();
+
+
 
   const parseCSV = (csvText: string) => {
     const lines = csvText.split('\n');
@@ -75,6 +80,7 @@ const BulkUpload = () => {
     return items;
   };
 
+  
   const handleUpload = async () => {
     if (!file || !user) return;
 
