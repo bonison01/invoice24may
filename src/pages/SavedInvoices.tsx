@@ -84,6 +84,9 @@ const SavedInvoices = () => {
   const [accountNumber, setAccountNumber] = useState("");
   const [ifscCode, setIfscCode] = useState("");
 
+  const { activeCompany } = useCompany();
+const ownerId = useActiveOwnerId();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [customerFilter, setCustomerFilter] = useState("All");
@@ -122,8 +125,7 @@ const SavedInvoices = () => {
     toast({ title: "Error", description: "Failed to load business settings.", variant: "destructive" });
   }
 };
-const { activeCompany } = useCompany();
-const ownerId = useActiveOwnerId();
+
 
 // Replace the useEffect:
 useEffect(() => {

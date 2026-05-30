@@ -39,7 +39,7 @@ const Index = () => {
         <div className="text-center space-y-6">
           <div className="space-y-2">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-yellow-600 bg-clip-text text-transparent">
-              Welcome to Invoicely
+              Welcome to Business Invoice Manager
             </h1>
             <p className="text-gray-600 text-lg">
               Professional invoice management made simple

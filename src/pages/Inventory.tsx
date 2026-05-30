@@ -13,12 +13,11 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import {
   Plus, Edit, Trash2, Search, AlertTriangle, Package,
-  Upload, Download, CheckCircle, XCircle, FileText, FileDown,
+  Upload, Download, CheckCircle, XCircle, FileText, FileDown, Building2,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
 import { useCompany } from "@/hooks/useCompany";
-import { Building2 } from "lucide-react";
 
 export interface InventoryProduct {
   id: string;
@@ -82,10 +81,11 @@ const CSV_HEADERS = [
 const CSV_SAMPLES = [
   ["Cotton T-Shirt", "Premium cotton tee", "clothing", "piece", "M", "Black", "Unbranded", "50", "499", "250", "6109", "10"],
   ["Cotton T-Shirt", "Premium cotton tee", "clothing", "piece", "L", "Black", "Unbranded", "30", "499", "250", "6109", "10"],
-  ["Cotton T-Shirt", "Premium cotton tee", "clothing", "piece", "S",  "White", "Unbranded", "20", "499", "250", "6109", "5"],
-  ["Formal Trousers", "Slim fit trousers",  "clothing", "piece", "M", "Grey",  "Other",      "15", "999", "500", "6203", "5"],
+  ["Cotton T-Shirt", "Premium cotton tee", "clothing", "piece", "S", "White", "Unbranded", "20", "499", "250", "6109", "5"],
+  ["Formal Trousers", "Slim fit trousers", "clothing", "piece", "M", "Grey", "Other", "15", "999", "500", "6203", "5"],
 ];
-const { activeCompany } = useCompany();
+
+// ── Pure helpers (no hooks) ──────────────────────────────────────────────────
 
 function downloadCSV(filename: string, rows: string[][]) {
   const content = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
@@ -119,8 +119,14 @@ function validateCSVRow(row: CSVPreviewRow): string[] {
   return errors;
 }
 
+// ── Component ────────────────────────────────────────────────────────────────
+
 const Inventory = () => {
+  // ✅ All hooks at the top level of the component
   const { user } = useAuth();
+  const { activeCompany } = useCompany(); // ✅ FIXED: moved inside component
+  const ownerId = useActiveOwnerId();
+
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<InventoryProduct[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -150,30 +156,29 @@ const Inventory = () => {
     unit: "piece", category: "", barcode: "", hsn_code: "",
     variants: [defaultVariant()],
   });
-const ownerId = useActiveOwnerId();
-  // useEffect(() => { if (user) { fetchProducts(); fetchLowStockProducts(); } }, [user]);
+
   useEffect(() => { if (ownerId) { fetchProducts(); fetchLowStockProducts(); } }, [ownerId]);
   useEffect(() => { filterProducts(); }, [products, searchTerm, categoryFilter, stockFilter]);
 
   const fetchProducts = async () => {
-  if (!ownerId) return;
-  setIsLoading(true);
-  try {
-    const { data, error } = await supabase
-      .from("inventory_products")
-      .select("*")
-      .eq("user_id", ownerId)
-      .order("name");
-    if (error) throw error;
-    setProducts(data || []);
-  } catch {
-    toast({ title: "Error", description: "Failed to fetch products.", variant: "destructive" });
-  }
-  setIsLoading(false);
-};
+    if (!ownerId) return;
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("inventory_products")
+        .select("*")
+        .eq("user_id", ownerId)
+        .order("name");
+      if (error) throw error;
+      setProducts(data || []);
+    } catch {
+      toast({ title: "Error", description: "Failed to fetch products.", variant: "destructive" });
+    }
+    setIsLoading(false);
+  };
 
   const fetchLowStockProducts = async () => {
-    if (!user) return;
+    if (!ownerId) return;
     try {
       const { data, error } = await supabase.rpc("get_low_stock_products", { user_uuid: ownerId });
       if (error) throw error;
@@ -250,7 +255,6 @@ const ownerId = useActiveOwnerId();
     return { status: "In Stock", variant: "default" as const };
   };
 
-  // CSV
   const handleDownloadSample = () => {
     downloadCSV("inventory_sample.csv", [CSV_HEADERS, ...CSV_SAMPLES]);
     toast({ title: "Downloaded", description: "inventory_sample.csv saved. Fill it in and import." });
@@ -276,7 +280,7 @@ const ownerId = useActiveOwnerId();
   };
 
   const handleCSVImport = async () => {
-    if (!user) return;
+    if (!ownerId) return;
     const valid = csvPreviewRows.filter((r) => r.valid);
     if (!valid.length) { toast({ title: "No valid rows", variant: "destructive" }); return; }
     setCSVImporting(true);
@@ -302,6 +306,16 @@ const ownerId = useActiveOwnerId();
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-yellow-50">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
+
+        {/* ✅ FIXED: Banner is now inside the container div */}
+        {activeCompany && !activeCompany.isOwn && (
+          <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
+            <p className="text-sm font-semibold text-blue-800">
+              Viewing: {activeCompany.companyName} — Role: {activeCompany.role}
+            </p>
+          </div>
+        )}
 
         <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
           <div>
@@ -596,15 +610,8 @@ const ownerId = useActiveOwnerId();
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
       </div>
-      {activeCompany && !activeCompany.isOwn && (
-  <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-    <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
-    <p className="text-sm font-semibold text-blue-800">
-      Viewing: {activeCompany.companyName} — Role: {activeCompany.role}
-    </p>
-  </div>
-)}
     </div>
   );
 };

@@ -65,8 +65,7 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "card", label: "Card" },
   { value: "other", label: "Other" },
 ];
-const ownerId = useActiveOwnerId();
-const { activeCompany } = useCompany();
+
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -93,7 +92,8 @@ function downloadCSV(filename: string, rows: string[][]) {
 
 const Cashbook = () => {
   const { user } = useAuth();
-
+const ownerId = useActiveOwnerId();
+const { activeCompany } = useCompany();
   const [entries, setEntries] = useState<CashbookEntry[]>([]);
   const [filtered, setFiltered] = useState<CashbookEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
