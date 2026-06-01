@@ -29,8 +29,8 @@ const Auth = () => {
   const { signIn } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  // ── Forgot password state ──────────────────────────
   const [showForgot, setShowForgot] = useState(false);
   const [forgotStep, setForgotStep] = useState<ForgotStep>("email");
   const [forgotEmail, setForgotEmail] = useState("");
@@ -38,8 +38,13 @@ const Auth = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  // ── Login form state ───────────────────────────────
+  const [loginForm, setLoginForm] = useState({
+    email: "",
+    password: "",
+  });
 
+  // ── Request access form state ──────────────────────
   const [requestForm, setRequestForm] = useState({
     full_name: "",
     address: "",
@@ -49,30 +54,13 @@ const Auth = () => {
     phone: "",
   });
 
-  // ── GOOGLE LOGIN ───────────────────────────────────
-  const handleGoogleLogin = async () => {
-    setIsGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/`,
-      },
-    });
-    if (error) {
-      toast({
-        title: "Google Login Failed ❌",
-        description: error.message,
-        variant: "destructive",
-      });
-      setIsGoogleLoading(false);
-    }
-  };
-
   // ── LOGIN ──────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
     const { error } = await signIn(loginForm.email, loginForm.password);
+
     if (error) {
       toast({
         title: "Login Failed ❌",
@@ -86,23 +74,23 @@ const Auth = () => {
       });
       navigate("/");
     }
+
     setIsLoading(false);
   };
 
-  // ── FORGOT: STEP 1 — Send OTP ──────────────────────
+  // ── FORGOT: STEP 1 — Send OTP via Edge Function ────
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
     const { data, error } = await supabase.functions.invoke("send-otp", {
       body: { email: forgotEmail },
     });
+
     if (error || data?.error) {
       toast({
         title: "Failed ❌",
-        description:
-          data?.error === "No account found with this email."
-            ? "No account found with this email. Please check or request access."
-            : data?.error || error?.message || "Could not send OTP.",
+        description: data?.error || error?.message || "Could not send OTP.",
         variant: "destructive",
       });
     } else {
@@ -112,16 +100,19 @@ const Auth = () => {
       });
       setForgotStep("otp");
     }
+
     setIsLoading(false);
   };
 
-  // ── FORGOT: STEP 2 — Verify OTP ───────────────────
+  // ── FORGOT: STEP 2 — Verify OTP via Edge Function ──
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
     const { data, error } = await supabase.functions.invoke("verify-otp", {
       body: { email: forgotEmail, otp: otpCode },
     });
+
     if (error || data?.error) {
       toast({
         title: "Invalid OTP ❌",
@@ -135,12 +126,14 @@ const Auth = () => {
       });
       setForgotStep("newPassword");
     }
+
     setIsLoading(false);
   };
 
-  // ── FORGOT: STEP 3 — Reset Password ───────────────
+  // ── FORGOT: STEP 3 — Reset Password via Edge Function
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (newPassword !== confirmPassword) {
       toast({
         title: "Mismatch ❌",
@@ -149,6 +142,7 @@ const Auth = () => {
       });
       return;
     }
+
     if (newPassword.length < 6) {
       toast({
         title: "Too Short ❌",
@@ -157,10 +151,13 @@ const Auth = () => {
       });
       return;
     }
+
     setIsLoading(true);
+
     const { data, error } = await supabase.functions.invoke("reset-password", {
       body: { email: forgotEmail, newPassword },
     });
+
     if (error || data?.error) {
       toast({
         title: "Reset Failed ❌",
@@ -172,6 +169,7 @@ const Auth = () => {
         title: "Password Reset ✅",
         description: "You can now log in with your new password.",
       });
+      // Reset entire forgot flow
       setShowForgot(false);
       setForgotStep("email");
       setForgotEmail("");
@@ -179,6 +177,7 @@ const Auth = () => {
       setNewPassword("");
       setConfirmPassword("");
     }
+
     setIsLoading(false);
   };
 
@@ -200,21 +199,19 @@ const Auth = () => {
   const handleRequestAccess = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
     try {
       const { error } = await (supabase as any)
         .from("signup_requests")
         .insert([requestForm]);
-      if (error) throw error;
 
-      // Notify admin via email
-      await supabase.functions.invoke("send-otp", {
-        body: { _notify_admin: true, requestForm },
-      });
+      if (error) throw error;
 
       toast({
         title: "Request Submitted ✅",
         description: "Your account request has been submitted successfully.",
       });
+
       setRequestForm({
         full_name: "",
         address: "",
@@ -230,6 +227,7 @@ const Auth = () => {
         variant: "destructive",
       });
     }
+
     setIsLoading(false);
   };
 
@@ -288,6 +286,7 @@ const Auth = () => {
               Enter your registered email to receive an OTP.
             </p>
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="forgot-email">Email</Label>
             <Input
@@ -299,6 +298,7 @@ const Auth = () => {
               required
             />
           </div>
+
           <Button
             type="submit"
             className="w-full bg-gradient-to-r from-green-600 to-purple-600 hover:from-green-700 hover:to-purple-700"
@@ -324,6 +324,7 @@ const Auth = () => {
               <span className="font-medium text-gray-700">{forgotEmail}</span>
             </p>
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="otp">OTP Code</Label>
             <Input
@@ -338,6 +339,7 @@ const Auth = () => {
               required
             />
           </div>
+
           <Button
             type="submit"
             className="w-full bg-gradient-to-r from-green-600 to-purple-600 hover:from-green-700 hover:to-purple-700"
@@ -345,6 +347,7 @@ const Auth = () => {
           >
             {isLoading ? "Verifying..." : "Verify OTP"}
           </Button>
+
           <p className="text-center text-sm text-gray-500">
             Didn't receive it?{" "}
             <button
@@ -373,6 +376,7 @@ const Auth = () => {
               Choose a strong password for your account.
             </p>
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="new-password">New Password</Label>
             <Input
@@ -384,6 +388,7 @@ const Auth = () => {
               required
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="confirm-password">Confirm Password</Label>
             <Input
@@ -401,6 +406,7 @@ const Auth = () => {
               <p className="text-xs text-green-600">Passwords match ✓</p>
             )}
           </div>
+
           <Button
             type="submit"
             className="w-full bg-gradient-to-r from-green-600 to-purple-600 hover:from-green-700 hover:to-purple-700"
@@ -417,8 +423,8 @@ const Auth = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-purple-50 flex items-center justify-center p-4">
       <Navbar />
-      <div className="w-full max-w-md">
 
+      <div className="w-full max-w-md">
         {/* HEADER */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
@@ -453,90 +459,58 @@ const Auth = () => {
 
                 {/* LOGIN TAB */}
                 <TabsContent value="login">
-                  <div className="space-y-4 pt-2">
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="Enter your email"
+                        value={loginForm.email}
+                        onChange={(e) =>
+                          setLoginForm({ ...loginForm, email: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
 
-                    {/* GOOGLE BUTTON */}
-                    {/* <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full flex items-center gap-3 border-gray-300 hover:bg-gray-50"
-                      onClick={handleGoogleLogin}
-                      disabled={isGoogleLoading}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="password">Password</Label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setForgotEmail(loginForm.email);
+                            setShowForgot(true);
+                          }}
+                          className="text-xs text-green-600 hover:text-purple-600 hover:underline transition-colors"
+                        >
+                          Forgot Password?
+                        </button>
+                      </div>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="Enter your password"
+                        value={loginForm.password}
+                        onChange={(e) =>
+                          setLoginForm({
+                            ...loginForm,
+                            password: e.target.value,
+                          })
+                        }
+                        required
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="w-full bg-gradient-to-r from-green-600 to-purple-600 hover:from-green-700 hover:to-purple-700"
+                      disabled={isLoading}
                     >
-                      {isGoogleLoading ? (
-                        <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                        </svg>
-                      )}
-                      {isGoogleLoading ? "Redirecting..." : "Continue with Google"}
-                    </Button> */}
-
-                    {/* DIVIDER */}
-                    {/* <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-gray-200" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-white px-2 text-gray-400">
-                          or sign in with email
-                        </span>
-                      </div>
-                    </div> */}
-
-                    {/* EMAIL/PASSWORD FORM */}
-                    <form onSubmit={handleLogin} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Email</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="Enter your email"
-                          value={loginForm.email}
-                          onChange={(e) =>
-                            setLoginForm({ ...loginForm, email: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="password">Password</Label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setForgotEmail(loginForm.email);
-                              setShowForgot(true);
-                            }}
-                            className="text-xs text-green-600 hover:text-purple-600 hover:underline transition-colors"
-                          >
-                            Forgot Password?
-                          </button>
-                        </div>
-                        <Input
-                          id="password"
-                          type="password"
-                          placeholder="Enter your password"
-                          value={loginForm.password}
-                          onChange={(e) =>
-                            setLoginForm({ ...loginForm, password: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-                      <Button
-                        type="submit"
-                        className="w-full bg-gradient-to-r from-green-600 to-purple-600 hover:from-green-700 hover:to-purple-700"
-                        disabled={isLoading}
-                      >
-                        {isLoading ? "Signing In..." : "Sign In"}
-                      </Button>
-                    </form>
-                  </div>
+                      {isLoading ? "Signing In..." : "Sign In"}
+                    </Button>
+                  </form>
                 </TabsContent>
 
                 {/* REQUEST ACCESS TAB */}
@@ -550,6 +524,7 @@ const Auth = () => {
                         Fill in your details for approval.
                       </p>
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="full-name">Full Name</Label>
                       <Input
@@ -558,11 +533,15 @@ const Auth = () => {
                         placeholder="Enter your full name"
                         value={requestForm.full_name}
                         onChange={(e) =>
-                          setRequestForm({ ...requestForm, full_name: e.target.value })
+                          setRequestForm({
+                            ...requestForm,
+                            full_name: e.target.value,
+                          })
                         }
                         required
                       />
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="address">Address</Label>
                       <Input
@@ -571,11 +550,15 @@ const Auth = () => {
                         placeholder="Enter your address"
                         value={requestForm.address}
                         onChange={(e) =>
-                          setRequestForm({ ...requestForm, address: e.target.value })
+                          setRequestForm({
+                            ...requestForm,
+                            address: e.target.value,
+                          })
                         }
                         required
                       />
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="request-email">Email</Label>
                       <Input
@@ -584,11 +567,15 @@ const Auth = () => {
                         placeholder="Enter your email"
                         value={requestForm.email}
                         onChange={(e) =>
-                          setRequestForm({ ...requestForm, email: e.target.value })
+                          setRequestForm({
+                            ...requestForm,
+                            email: e.target.value,
+                          })
                         }
                         required
                       />
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="business-name">Business Name</Label>
                       <Input
@@ -597,11 +584,15 @@ const Auth = () => {
                         placeholder="Enter business name"
                         value={requestForm.business_name}
                         onChange={(e) =>
-                          setRequestForm({ ...requestForm, business_name: e.target.value })
+                          setRequestForm({
+                            ...requestForm,
+                            business_name: e.target.value,
+                          })
                         }
                         required
                       />
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="business-address">Business Address</Label>
                       <Input
@@ -610,11 +601,15 @@ const Auth = () => {
                         placeholder="Enter business address"
                         value={requestForm.business_address}
                         onChange={(e) =>
-                          setRequestForm({ ...requestForm, business_address: e.target.value })
+                          setRequestForm({
+                            ...requestForm,
+                            business_address: e.target.value,
+                          })
                         }
                         required
                       />
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="phone">Phone Number</Label>
                       <Input
@@ -623,11 +618,15 @@ const Auth = () => {
                         placeholder="Enter phone number"
                         value={requestForm.phone}
                         onChange={(e) =>
-                          setRequestForm({ ...requestForm, phone: e.target.value })
+                          setRequestForm({
+                            ...requestForm,
+                            phone: e.target.value,
+                          })
                         }
                         required
                       />
                     </div>
+
                     <Button
                       type="submit"
                       className="w-full bg-gradient-to-r from-green-600 to-purple-600 hover:from-green-700 hover:to-purple-700"
