@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Upload, X, Users2 } from "lucide-react";
+import { ArrowLeft, Save, Upload, X, Users2, Mail, Pencil } from "lucide-react";
 import Navbar from "@/components/Navbar";
 
 interface BusinessSettings {
@@ -30,6 +29,7 @@ interface BusinessSettings {
 const BusinessSettings = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+
   const [settings, setSettings] = useState<BusinessSettings>({
     business_name: '',
     business_address: '',
@@ -39,37 +39,41 @@ const BusinessSettings = () => {
     thank_you_note: 'Thank you for choosing our services.',
     seal_url: '',
     signature_url: '',
-    // ✅ NEW
     upi_id: '',
     bank_name: '',
     account_number: '',
     ifsc_code: '',
   });
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingSeal, setUploadingSeal] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
 
+  // ── Email change state ─────────────────────────────
+  const [currentEmail, setCurrentEmail] = useState("");
+  const [showEmailEdit, setShowEmailEdit] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
+
   useEffect(() => {
     if (user) {
+      setCurrentEmail(user.email || "");
       fetchBusinessSettings();
     }
   }, [user]);
 
   const fetchBusinessSettings = async () => {
     if (!user) return;
-
     setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('business_settings')
         .select('*')
         .eq('user_id', user.id)
-        .single()
+        .single();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
+      if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
         setSettings({
@@ -89,18 +93,45 @@ const BusinessSettings = () => {
       }
     } catch (error) {
       console.error('Error fetching business settings:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load business settings.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to load business settings.", variant: "destructive" });
     }
     setIsLoading(false);
   };
 
+  // ── Change login email ─────────────────────────────
+  const handleChangeEmail = async () => {
+    if (!newEmail.trim()) {
+      toast({ title: "Error ❌", description: "Please enter a new email.", variant: "destructive" });
+      return;
+    }
+    if (newEmail === currentEmail) {
+      toast({ title: "Same Email", description: "New email is the same as current.", variant: "destructive" });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      toast({ title: "Invalid Email ❌", description: "Please enter a valid email address.", variant: "destructive" });
+      return;
+    }
+
+    setIsChangingEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      if (error) throw error;
+      toast({
+        title: "Confirmation Sent ✅",
+        description: `A confirmation link has been sent to ${newEmail}. Please check your inbox to confirm the change.`,
+      });
+      setShowEmailEdit(false);
+      setNewEmail("");
+    } catch (error: any) {
+      toast({ title: "Failed ❌", description: error.message || "Could not update email.", variant: "destructive" });
+    }
+    setIsChangingEmail(false);
+  };
+
   const saveSettings = async () => {
     if (!user) return;
-
     setIsSaving(true);
     try {
       const { error } = await supabase
@@ -116,113 +147,59 @@ const BusinessSettings = () => {
             thank_you_note: settings.thank_you_note,
             seal_url: settings.seal_url,
             signature_url: settings.signature_url,
-            // ✅ NEW
             upi_id: settings.upi_id,
             bank_name: settings.bank_name,
             account_number: settings.account_number,
             ifsc_code: settings.ifsc_code,
             updated_at: new Date().toISOString()
           },
-          { onConflict: 'user_id' } // ✅ ensure updates instead of no-op
+          { onConflict: 'user_id' }
         );
-
       if (error) throw error;
-
-      toast({
-        title: "Settings saved!",
-        description: "Your business settings have been updated successfully.",
-      });
+      toast({ title: "Settings saved!", description: "Your business settings have been updated successfully." });
     } catch (error) {
       console.error('Error saving business settings:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save business settings. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to save business settings.", variant: "destructive" });
     }
     setIsSaving(false);
   };
 
   const uploadFile = async (file: File, type: 'seal' | 'signature') => {
     if (!user) return;
-
-    const isValidType = file.type.startsWith('image/');
-    if (!isValidType) {
-      toast({
-        title: "Invalid file type",
-        description: "Please upload an image file.",
-        variant: "destructive",
-      });
+    if (!file.type.startsWith('image/')) {
+      toast({ title: "Invalid file type", description: "Please upload an image file.", variant: "destructive" });
       return;
     }
-
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSize) {
-      toast({
-        title: "File too large",
-        description: "Please upload an image smaller than 5MB.",
-        variant: "destructive",
-      });
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please upload an image smaller than 5MB.", variant: "destructive" });
       return;
     }
-
-    if (type === 'seal') {
-      setUploadingSeal(true);
-    } else {
-      setUploadingSignature(true);
-    }
+    if (type === 'seal') setUploadingSeal(true);
+    else setUploadingSignature(true);
 
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/${type}.${fileExt}`;
-
-      const { error: uploadError, data } = await supabase.storage
-        .from('business-docs')
-        .upload(fileName, file, { upsert: true });
-
+      const { error: uploadError } = await supabase.storage.from('business-docs').upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('business-docs')
-        .getPublicUrl(fileName);
-
-      setSettings(prev => ({
-        ...prev,
-        [type === 'seal' ? 'seal_url' : 'signature_url']: publicUrl
-      }));
-
-      toast({
-        title: "Upload successful!",
-        description: `${type === 'seal' ? 'Seal' : 'Signature'} uploaded successfully.`,
-      });
+      const { data: { publicUrl } } = supabase.storage.from('business-docs').getPublicUrl(fileName);
+      setSettings(prev => ({ ...prev, [type === 'seal' ? 'seal_url' : 'signature_url']: publicUrl }));
+      toast({ title: "Upload successful!", description: `${type === 'seal' ? 'Seal' : 'Signature'} uploaded successfully.` });
     } catch (error) {
       console.error(`Error uploading ${type}:`, error);
-      toast({
-        title: "Upload failed",
-        description: `Failed to upload ${type}. Please try again.`,
-        variant: "destructive",
-      });
+      toast({ title: "Upload failed", description: `Failed to upload ${type}.`, variant: "destructive" });
     }
 
-    if (type === 'seal') {
-      setUploadingSeal(false);
-    } else {
-      setUploadingSignature(false);
-    }
+    if (type === 'seal') setUploadingSeal(false);
+    else setUploadingSignature(false);
   };
 
   const removeFile = (type: 'seal' | 'signature') => {
-    setSettings(prev => ({
-      ...prev,
-      [type === 'seal' ? 'seal_url' : 'signature_url']: ''
-    }));
+    setSettings(prev => ({ ...prev, [type === 'seal' ? 'seal_url' : 'signature_url']: '' }));
   };
 
   const handleInputChange = (field: keyof BusinessSettings, value: string) => {
-    setSettings(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setSettings(prev => ({ ...prev, [field]: value }));
   };
 
   if (isLoading) {
@@ -251,27 +228,92 @@ const BusinessSettings = () => {
           </div>
         </div>
 
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-2xl mx-auto space-y-6">
+
+          {/* ── ACCOUNT EMAIL CARD ─────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-green-600" />
+                Account Email
+              </CardTitle>
+              <CardDescription>
+                This is the email you use to log in
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!showEmailEdit ? (
+                <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Current email</p>
+                    <p className="font-medium text-gray-800">{currentEmail || "—"}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setShowEmailEdit(true); setNewEmail(""); }}
+                    className="flex items-center gap-1.5"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Change
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                    <p className="text-xs text-amber-700 font-medium">⚠️ A confirmation link will be sent to your new email. You must click it to complete the change.</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="new-email">New Email Address</Label>
+                    <Input
+                      id="new-email"
+                      type="email"
+                      placeholder="Enter new email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleChangeEmail()}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleChangeEmail}
+                      disabled={isChangingEmail || !newEmail.trim()}
+                      className="flex-1 bg-gradient-to-r from-green-600 to-purple-600 hover:from-green-700 hover:to-purple-700"
+                    >
+                      {isChangingEmail ? "Sending..." : "Send Confirmation"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => { setShowEmailEdit(false); setNewEmail(""); }}
+                      disabled={isChangingEmail}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── TEAM CARD ──────────────────────────────── */}
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/team-settings')}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users2 className="w-5 h-5" />
                 Team & Roles
               </CardTitle>
-              <CardDescription>
-                Grant teammates access to your data
-              </CardDescription>
+              <CardDescription>Grant teammates access to your data</CardDescription>
             </CardHeader>
             <CardContent>
               <Button className="w-full" variant="outline">Manage Team</Button>
             </CardContent>
           </Card>
+
+          {/* ── BUSINESS INFO CARD ─────────────────────── */}
           <Card>
             <CardHeader>
               <CardTitle>Business Information</CardTitle>
-              <CardDescription>
-                This information will appear on your invoices
-              </CardDescription>
+              <CardDescription>This information will appear on your invoices</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -327,10 +369,10 @@ const BusinessSettings = () => {
                   rows={3}
                 />
               </div>
+
+              {/* Payment Details */}
               <div className="border-t pt-6 space-y-4">
                 <h3 className="font-semibold text-gray-800">Payment Details</h3>
-
-                {/* UPI */}
                 <div>
                   <Label>UPI ID</Label>
                   <Input
@@ -339,8 +381,6 @@ const BusinessSettings = () => {
                     placeholder="example@okaxis"
                   />
                 </div>
-
-                {/* Bank Name */}
                 <div>
                   <Label>Bank Name</Label>
                   <Input
@@ -349,8 +389,6 @@ const BusinessSettings = () => {
                     placeholder="State Bank of India"
                   />
                 </div>
-
-                {/* Account Number */}
                 <div>
                   <Label>Account Number</Label>
                   <Input
@@ -359,8 +397,6 @@ const BusinessSettings = () => {
                     placeholder="XXXXXXXXXXXX"
                   />
                 </div>
-
-                {/* IFSC */}
                 <div>
                   <Label>IFSC Code</Label>
                   <Input
@@ -382,24 +418,16 @@ const BusinessSettings = () => {
                 />
               </div>
 
+              {/* Seal & Signature */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <Label htmlFor="seal_upload">Business Seal</Label>
                   <div className="space-y-2">
                     {settings.seal_url ? (
                       <div className="relative inline-block">
-                        <img
-                          src={settings.seal_url}
-                          alt="Business Seal"
-                          className="w-20 h-20 object-contain border rounded"
-                        />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="absolute -top-2 -right-2 h-6 w-6 p-0"
-                          onClick={() => removeFile('seal')}
-                        >
+                        <img src={settings.seal_url} alt="Business Seal" className="w-20 h-20 object-contain border rounded" />
+                        <Button type="button" variant="destructive" size="sm"
+                          className="absolute -top-2 -right-2 h-6 w-6 p-0" onClick={() => removeFile('seal')}>
                           <X className="w-3 h-3" />
                         </Button>
                       </div>
@@ -409,16 +437,8 @@ const BusinessSettings = () => {
                         <p className="text-sm text-gray-500">Upload seal image</p>
                       </div>
                     )}
-                    <Input
-                      id="seal_upload"
-                      type="file"
-                      accept="image/*"
-                      disabled={uploadingSeal}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) uploadFile(file, 'seal');
-                      }}
-                    />
+                    <Input id="seal_upload" type="file" accept="image/*" disabled={uploadingSeal}
+                      onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadFile(file, 'seal'); }} />
                   </div>
                 </div>
                 <div>
@@ -426,18 +446,9 @@ const BusinessSettings = () => {
                   <div className="space-y-2">
                     {settings.signature_url ? (
                       <div className="relative inline-block">
-                        <img
-                          src={settings.signature_url}
-                          alt="Signature"
-                          className="w-32 h-16 object-contain border rounded"
-                        />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="absolute -top-2 -right-2 h-6 w-6 p-0"
-                          onClick={() => removeFile('signature')}
-                        >
+                        <img src={settings.signature_url} alt="Signature" className="w-32 h-16 object-contain border rounded" />
+                        <Button type="button" variant="destructive" size="sm"
+                          className="absolute -top-2 -right-2 h-6 w-6 p-0" onClick={() => removeFile('signature')}>
                           <X className="w-3 h-3" />
                         </Button>
                       </div>
@@ -447,16 +458,8 @@ const BusinessSettings = () => {
                         <p className="text-sm text-gray-500">Upload signature image</p>
                       </div>
                     )}
-                    <Input
-                      id="signature_upload"
-                      type="file"
-                      accept="image/*"
-                      disabled={uploadingSignature}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) uploadFile(file, 'signature');
-                      }}
-                    />
+                    <Input id="signature_upload" type="file" accept="image/*" disabled={uploadingSignature}
+                      onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadFile(file, 'signature'); }} />
                   </div>
                 </div>
               </div>
