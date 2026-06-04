@@ -37,6 +37,24 @@ const parseVariants = (p: InventoryProduct): Variant[] => {
   catch { return []; }
 };
 
+// Handles old plain-URL strings, new JSON arrays, and null
+const parsePhotoUrls = (photo_url: string | null | undefined): string[] => {
+  if (!photo_url) return [];
+  try {
+    const parsed = JSON.parse(photo_url);
+    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    return [photo_url];
+  } catch {
+    return [photo_url];
+  }
+};
+
+// Returns first photo URL or null
+const getFirstPhoto = (photo_url: string | null | undefined): string | null => {
+  const urls = parsePhotoUrls(photo_url);
+  return urls.length > 0 ? urls[0] : null;
+};
+
 const SPECIAL_KEYS = new Set(["id", "stock_quantity", "unit_price", "cost_price", "hsn_code", "min_stock_level"]);
 
 const getVariantLabel = (v: Variant) =>
@@ -61,11 +79,16 @@ const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2,
 function ProductModal({ product, onClose }: { product: InventoryProduct; onClose: () => void }) {
   const variants = parseVariants(product);
   const totalStock = getTotalStock(variants, product.current_stock);
+  const photos = parsePhotoUrls(product.photo_url);
+  const [photoIdx, setPhotoIdx] = useState(0);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
+
+  const prevPhoto = () => setPhotoIdx((i) => (i - 1 + photos.length) % photos.length);
+  const nextPhoto = () => setPhotoIdx((i) => (i + 1) % photos.length);
 
   return (
     <div
@@ -80,14 +103,51 @@ function ProductModal({ product, onClose }: { product: InventoryProduct; onClose
       >
         {/* Photo */}
         <div className="relative">
-          {product.photo_url ? (
-            <img src={product.photo_url} alt={product.name} className="w-full h-60 sm:h-72 object-cover sm:rounded-t-3xl rounded-t-3xl" />
+          {photos.length > 0 ? (
+            <div className="relative">
+              <img
+                src={photos[photoIdx]}
+                alt={product.name}
+                className="w-full h-60 sm:h-72 object-cover sm:rounded-t-3xl rounded-t-3xl"
+              />
+              {/* Nav arrows for multiple photos */}
+              {photos.length > 1 && (
+                <>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); prevPhoto(); }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white text-sm transition-all"
+                  >‹</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); nextPhoto(); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white text-sm transition-all"
+                  >›</button>
+                  <span className="absolute bottom-3 right-3 text-[11px] font-bold bg-black/40 text-white backdrop-blur-sm rounded-full px-2 py-0.5">
+                    {photoIdx + 1} / {photos.length}
+                  </span>
+                </>
+              )}
+              {/* Thumbnail strip */}
+              {photos.length > 1 && (
+                <div className="absolute bottom-3 left-3 flex gap-1.5">
+                  {photos.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={(e) => { e.stopPropagation(); setPhotoIdx(i); }}
+                      className={`w-2 h-2 rounded-full transition-all ${i === photoIdx ? "bg-white scale-125" : "bg-white/50"}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="w-full h-48 sm:rounded-t-3xl rounded-t-3xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
               <span className="text-6xl opacity-20">📦</span>
             </div>
           )}
-          <button onClick={onClose} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-sm flex items-center justify-center text-white text-sm transition-all">✕</button>
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-sm flex items-center justify-center text-white text-sm transition-all"
+          >✕</button>
           <div className="absolute bottom-3 left-3">
             <span className={`text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm border ${
               totalStock === 0
@@ -174,13 +234,27 @@ export default function PublicStore() {
     if (!userId) { setError("Invalid store link."); setLoading(false); return; }
     (async () => {
       setLoading(true);
-      const { data: profile } = await (supabase as any)
-        .from("profiles")
-        .select("full_name, company_name")
-        .eq("id", userId)
+
+      // ── FIX: Fetch business name from business_settings (not profiles) ──
+      const { data: bizSettings } = await supabase
+        .from("business_settings")
+        .select("business_name")
+        .eq("user_id", userId)
         .maybeSingle();
-      if (profile?.company_name) setStoreName(profile.company_name);
-      else if (profile?.full_name) setStoreName(`${profile.full_name}'s Store`);
+
+      if (bizSettings?.business_name) {
+        setStoreName(bizSettings.business_name);
+      } else {
+        // Fallback to profile name if business_settings not set
+        const { data: profile } = await (supabase as any)
+          .from("profiles")
+          .select("full_name, company_name")
+          .eq("id", userId)
+          .maybeSingle();
+        if (profile?.company_name) setStoreName(profile.company_name);
+        else if (profile?.full_name) setStoreName(`${profile.full_name}'s Store`);
+        else setStoreName("Our Store");
+      }
 
       const { data, error: err } = await supabase
         .from("inventory_products")
@@ -336,6 +410,8 @@ export default function PublicStore() {
                 const totalStock = getTotalStock(variants, product.current_stock);
                 const inStock    = totalStock > 0;
                 const hasRange   = variants.length > 1 && minPrice !== maxPrice;
+                // ── FIX: parse photo_url as JSON array ──
+                const firstPhoto = getFirstPhoto(product.photo_url);
 
                 return (
                   <button
@@ -344,8 +420,8 @@ export default function PublicStore() {
                     className="group text-left bg-white rounded-2xl overflow-hidden border border-[#e8e3dc] shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                   >
                     <div className="relative overflow-hidden bg-gray-100 aspect-square">
-                      {product.photo_url ? (
-                        <img src={product.photo_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                      {firstPhoto ? (
+                        <img src={firstPhoto} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
                           <span className="text-4xl opacity-20">📦</span>
@@ -366,6 +442,12 @@ export default function PublicStore() {
                       )}
                       {variants.length > 1 && (
                         <span className="absolute bottom-2 right-2 text-[10px] font-bold bg-white/80 backdrop-blur-sm text-gray-700 rounded-full px-2 py-0.5 border border-white">{variants.length} options</span>
+                      )}
+                      {/* Multi-photo indicator */}
+                      {parsePhotoUrls(product.photo_url).length > 1 && (
+                        <span className="absolute bottom-2 left-2 text-[10px] font-bold bg-black/40 text-white backdrop-blur-sm rounded-full px-2 py-0.5">
+                          +{parsePhotoUrls(product.photo_url).length - 1} photos
+                        </span>
                       )}
                     </div>
                     <div className="p-3">
