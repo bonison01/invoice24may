@@ -27,7 +27,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-// import { ArrowLeft, Download, Eye, Trash2 } from "lucide-react";
 import { ArrowLeft, Download, Eye, Trash2, Building2 } from "lucide-react";
 import InvoicePreview from "@/components/InvoicePreview";
 import InvoiceDownload from "@/components/InvoiceDownload";
@@ -39,6 +38,7 @@ import {
 import type { Invoice } from "@/pages/Invoices";
 import { useCompany } from "@/hooks/useCompany";
 import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
+import { useRole } from "@/hooks/useRole"; // ← add
 
 interface SavedInvoice {
   id: string;
@@ -69,6 +69,10 @@ interface SavedInvoice {
 const SavedInvoices = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { activeCompany } = useCompany();
+  const ownerId = useActiveOwnerId();
+  const { canDelete } = useRole(); // ← add
+
   const [invoices, setInvoices] = useState<SavedInvoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -84,9 +88,6 @@ const SavedInvoices = () => {
   const [accountNumber, setAccountNumber] = useState("");
   const [ifscCode, setIfscCode] = useState("");
 
-  const { activeCompany } = useCompany();
-const ownerId = useActiveOwnerId();
-
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [customerFilter, setCustomerFilter] = useState("All");
@@ -95,69 +96,60 @@ const ownerId = useActiveOwnerId();
   const [overdueOnly, setOverdueOnly] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    if (user && ownerId) {
       fetchBusinessSettings();
       fetchSavedInvoices();
     }
-  }, [user]);
+  }, [user, ownerId]);
 
   const fetchBusinessSettings = async () => {
-  if (!ownerId) return;
-  try {
-    const { data, error } = await (supabase as any)
-      .from("business_settings")
-      .select("*")
-      .eq("user_id", ownerId)
-      .single();
-    if (error && error.code !== "PGRST116") throw error;
-    if (data) {
-      setBusinessName(data.business_name || "");
-      setBusinessAddress(data.business_address || "");
-      setBusinessPhone(data.business_phone || "");
-      setSealUrl(data.seal_url || "");
-      setSignatureUrl(data.signature_url || "");
-      setUpiId(data.upi_id || "");
-      setBankName(data.bank_name || "");
-      setAccountNumber(data.account_number || "");
-      setIfscCode(data.ifsc_code || "");
+    if (!ownerId) return;
+    try {
+      const { data, error } = await (supabase as any)
+        .from("business_settings")
+        .select("*")
+        .eq("user_id", ownerId)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      if (data) {
+        setBusinessName(data.business_name || "");
+        setBusinessAddress(data.business_address || "");
+        setBusinessPhone(data.business_phone || "");
+        setSealUrl(data.seal_url || "");
+        setSignatureUrl(data.signature_url || "");
+        setUpiId(data.upi_id || "");
+        setBankName(data.bank_name || "");
+        setAccountNumber(data.account_number || "");
+        setIfscCode(data.ifsc_code || "");
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to load business settings.", variant: "destructive" });
     }
-  } catch (error) {
-    toast({ title: "Error", description: "Failed to load business settings.", variant: "destructive" });
-  }
-};
-
-
-// Replace the useEffect:
-useEffect(() => {
-  if (user && ownerId) {
-    fetchBusinessSettings();
-    fetchSavedInvoices();
-  }
-}, [user, ownerId]); // re-fetches when company switches
+  };
 
   const fetchSavedInvoices = async () => {
-  if (!ownerId) return;
-  try {
-    const { data, error } = await supabase
-      .from("saved_invoices")
-      .select("*")
-      .eq("user_id", ownerId)   // ← uses active company owner id
-      .order("created_at", { ascending: false });
-    if (error) throw error;
+    if (!ownerId) return;
+    try {
+      const { data, error } = await supabase
+        .from("saved_invoices")
+        .select("*")
+        .eq("user_id", ownerId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
 
-    const processed = (data || []).map((inv: any) => ({
-      ...inv,
-      items: Array.isArray(inv.items)
-        ? inv.items
-        : typeof inv.items === "string"
-        ? (() => { try { return JSON.parse(inv.items); } catch { return []; } })()
-        : [],
-    }));
-    setInvoices(processed as SavedInvoice[]);
-  } catch (error) {
-    toast({ title: "Error", description: "Failed to load saved invoices.", variant: "destructive" });
-  }
-};
+      const processed = (data || []).map((inv: any) => ({
+        ...inv,
+        items: Array.isArray(inv.items)
+          ? inv.items
+          : typeof inv.items === "string"
+          ? (() => { try { return JSON.parse(inv.items); } catch { return []; } })()
+          : [],
+      }));
+      setInvoices(processed as SavedInvoice[]);
+    } catch {
+      toast({ title: "Error", description: "Failed to load saved invoices.", variant: "destructive" });
+    }
+  };
 
   const updatePaymentStatus = async (invoiceId: string, status: "Paid" | "Unpaid" | "Partial") => {
     try {
@@ -176,6 +168,10 @@ useEffect(() => {
   };
 
   const deleteInvoice = async (invoiceId: string) => {
+    if (!canDelete) { // ← guard
+      toast({ title: "Access denied", description: "Only admins can delete invoices.", variant: "destructive" });
+      return;
+    }
     if (!user) return;
     const confirmed = window.confirm("Are you sure you want to delete this invoice?");
     if (!confirmed) return;
@@ -193,7 +189,6 @@ useEffect(() => {
     }
   };
 
-  // Convert saved invoice → Invoice type (with all new per-item fields preserved)
   const convertToInvoice = (saved: SavedInvoice): Invoice => ({
     id: saved.id,
     invoiceNumber: saved.invoice_number,
@@ -205,7 +200,6 @@ useEffect(() => {
       address: saved.customer_address,
       phone: saved.customer_phone,
     },
-    // items already parsed — per-item fields (hsnCode, itemDiscountAmount, etc.) pass through as-is
     items: (saved.items || []).map((item: any) => ({
       id: item.id ?? "",
       date: item.date ?? "",
@@ -285,6 +279,21 @@ useEffect(() => {
             <ArrowLeft className="w-4 h-4 mr-2" /> Dashboard
           </Button>
         </div>
+
+        {/* ── Company context banner ── */}
+        {activeCompany && !activeCompany.isOwn && (
+          <div className="mb-6 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-blue-800">
+                Viewing: {activeCompany.companyName}
+              </p>
+              <p className="text-xs text-blue-600 capitalize">
+                Your role: {activeCompany.role}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -445,9 +454,12 @@ useEffect(() => {
                               <Button size="sm" variant="outline" onClick={() => downloadInvoice(invoice)}>
                                 <Download className="w-4 h-4 mr-1" /> Download
                               </Button>
-                              <Button size="sm" variant="destructive" onClick={() => deleteInvoice(invoice.id)}>
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              {/* ── Delete: admins only ── */}
+                              {canDelete && (
+                                <Button size="sm" variant="destructive" onClick={() => deleteInvoice(invoice.id)}>
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -481,20 +493,7 @@ useEffect(() => {
             )}
           </DialogContent>
         </Dialog>
-{/* Company context banner */}
-{activeCompany && !activeCompany.isOwn && (
-  <div className="mb-6 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-    <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
-    <div>
-      <p className="text-sm font-semibold text-blue-800">
-        Viewing: {activeCompany.companyName}
-      </p>
-      <p className="text-xs text-blue-600 capitalize">
-        Your role: {activeCompany.role}
-      </p>
-    </div>
-  </div>
-)}
+
         {/* ── Hidden PDF Generator ── */}
         {selectedInvoice && (
           <InvoiceDownload

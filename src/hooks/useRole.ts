@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/hooks/useCompany";
@@ -17,9 +17,13 @@ export interface RoleData {
   companyOwnerId: string | null;
   customPermissions: CustomPermissions;
   isAdmin: boolean;
+  canDelete: boolean;         // ← new
   can: (section: keyof CustomPermissions) => boolean;
   isLoading: boolean;
 }
+
+// Module-level cache — survives re-renders, cleared on sign-out
+const cache: Record<string, { role: Role; companyOwnerId: string | null; customPermissions: CustomPermissions }> = {};
 
 export const useRole = (): RoleData => {
   const { user } = useAuth();
@@ -30,15 +34,20 @@ export const useRole = (): RoleData => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { setIsLoading(false); return; }
+    if (!user) {
+      // Clear everything on sign-out
+      Object.keys(cache).forEach((k) => delete cache[k]);
+      setRole(null);
+      setIsLoading(false);
+      return;
+    }
     fetchRole();
-  }, [user, activeCompany]);
+  }, [user?.id, activeCompany?.companyOwnerId, activeCompany?.isOwn]);
 
   const fetchRole = async () => {
     if (!user) return;
-    setIsLoading(true);
 
-    // If viewing own company, always admin
+    // Own company — always admin, no fetch needed
     if (!activeCompany || activeCompany.isOwn) {
       setRole("admin");
       setCompanyOwnerId(user.id);
@@ -47,7 +56,19 @@ export const useRole = (): RoleData => {
       return;
     }
 
-    // Viewing another company — fetch the role for that company
+    // Check cache first
+    const cacheKey = `${user.id}:${activeCompany.companyOwnerId}`;
+    if (cache[cacheKey]) {
+      const hit = cache[cacheKey];
+      setRole(hit.role);
+      setCompanyOwnerId(hit.companyOwnerId);
+      setCustomPermissions(hit.customPermissions);
+      setIsLoading(false);
+      return;
+    }
+
+    // Cache miss — fetch once
+    setIsLoading(true);
     try {
       const { data, error } = await (supabase as any)
         .from("user_roles")
@@ -57,11 +78,16 @@ export const useRole = (): RoleData => {
         .maybeSingle();
 
       if (!error && data) {
-        setRole(data.role as Role);
-        setCompanyOwnerId(data.company_owner_id);
-        setCustomPermissions(data.custom_permissions || {});
+        const resolved = {
+          role: data.role as Role,
+          companyOwnerId: data.company_owner_id,
+          customPermissions: data.custom_permissions || {},
+        };
+        cache[cacheKey] = resolved;           // store in cache
+        setRole(resolved.role);
+        setCompanyOwnerId(resolved.companyOwnerId);
+        setCustomPermissions(resolved.customPermissions);
       } else {
-        // No role for this company context — deny
         setRole(null);
         setCompanyOwnerId(null);
         setCustomPermissions({});
@@ -72,11 +98,12 @@ export const useRole = (): RoleData => {
     setIsLoading(false);
   };
 
-  // isAdmin = viewing own company OR has admin role in active company
   const isAdmin = !activeCompany || activeCompany.isOwn || role === "admin";
 
+  // Only the owner (own company) or an explicit admin role can delete
+  const canDelete = !activeCompany || activeCompany.isOwn || role === "admin";
+
   const can = (section: keyof CustomPermissions): boolean => {
-    // Always allow if on own company
     if (!activeCompany || activeCompany.isOwn) return true;
     if (role === "admin") return true;
     if (role === "manager") return true;
@@ -84,5 +111,5 @@ export const useRole = (): RoleData => {
     return false;
   };
 
-  return { role, companyOwnerId, customPermissions, isAdmin, can, isLoading };
+  return { role, companyOwnerId, customPermissions, isAdmin, canDelete, can, isLoading };
 };

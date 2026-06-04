@@ -147,15 +147,15 @@ const TeamSettings = () => {
 
     const { activeCompany } = useCompany(); // add this import too
 
-if (roleLoading) return null;
+    if (roleLoading) return null;
 
-if (activeCompany && !activeCompany.isOwn) {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-500">Team settings only available for your own company.</p>
-    </div>
-  );
-}
+    if (activeCompany && !activeCompany.isOwn) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <p className="text-gray-500">Team settings only available for your own company.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-purple-50">

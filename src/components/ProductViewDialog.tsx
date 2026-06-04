@@ -1,11 +1,13 @@
 // src/components/ProductViewDialog.tsx
 
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Image, Tag, Hash, Barcode, Layers, TrendingUp,
   AlertTriangle, CheckCircle, XCircle, CalendarDays, Package,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 // ── Types (mirror what Inventory.tsx uses) ────────────────────────────────────
@@ -85,24 +87,41 @@ const parseVariants = (product: InventoryProduct): VariantRow[] => {
   catch { return []; }
 };
 
+// Handles old plain-URL strings, new JSON arrays, and null
+const parsePhotoUrls = (product: InventoryProduct): string[] => {
+  const raw = product.photo_url;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    return [raw];
+  } catch {
+    return [raw];
+  }
+};
+
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function ProductViewDialog({ product, onClose, effectiveConfig, onEdit }: ProductViewDialogProps) {
+  const [photoIdx, setPhotoIdx] = useState(0);
+
   if (!product) return null;
 
+  const photos   = parsePhotoUrls(product);
   const variants = parseVariants(product);
-  const theme = getTheme(product.category);
+  const theme    = getTheme(product.category);
+
   const totalStock = variants.length
     ? variants.reduce((s, v) => s + (v.stock_quantity || 0), 0)
     : product.current_stock;
 
   const stockStatus =
-    totalStock === 0          ? { label: "Out of Stock", cls: "bg-red-100 text-red-700 border-red-200",       Icon: XCircle }
-    : totalStock <= product.min_stock_level ? { label: "Low Stock",     cls: "bg-yellow-100 text-yellow-700 border-yellow-200", Icon: AlertTriangle }
-    :                           { label: "In Stock",     cls: "bg-green-100 text-green-700 border-green-200",  Icon: CheckCircle };
+    totalStock === 0                          ? { label: "Out of Stock", cls: "bg-red-100 text-red-700 border-red-200",       Icon: XCircle }
+    : totalStock <= product.min_stock_level   ? { label: "Low Stock",     cls: "bg-yellow-100 text-yellow-700 border-yellow-200", Icon: AlertTriangle }
+    :                                           { label: "In Stock",       cls: "bg-green-100 text-green-700 border-green-200",  Icon: CheckCircle };
 
   const getVariantLabel = (v: VariantRow) =>
     effectiveConfig.variantFields.map((f) => v[f.key]).filter(Boolean).slice(0, 3).join(" / ") || "Default";
@@ -111,26 +130,86 @@ export function ProductViewDialog({ product, onClose, effectiveConfig, onEdit }:
   const totalCostValue  = variants.reduce((s, v) => s + (v.cost_price  || 0) * (v.stock_quantity || 0), 0);
   const potentialProfit = totalStockValue - totalCostValue;
 
+  const prevPhoto = () => setPhotoIdx((i) => (i - 1 + photos.length) % photos.length);
+  const nextPhoto = () => setPhotoIdx((i) => (i + 1) % photos.length);
+
   return (
     <Dialog open={!!product} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-0 gap-0 rounded-2xl">
 
         {/* ── Hero ── */}
         <div className={`bg-gradient-to-br ${theme.gradient} rounded-t-2xl`}>
-          <div className="flex gap-5 p-6">
-            {/* Photo */}
-            <div className="shrink-0">
-              {product.photo_url ? (
-                <img src={product.photo_url} alt={product.name} className="w-36 h-36 object-cover rounded-2xl border-2 border-white shadow-lg" />
-              ) : (
+
+          {/* ── Photo gallery ── */}
+          {photos.length > 0 ? (
+            <div className="px-6 pt-6 pb-4">
+              {/* Main photo */}
+              <div className="relative rounded-2xl overflow-hidden bg-white/40 border border-white/60 shadow-sm" style={{ height: "240px" }}>
+                <img
+                  key={photoIdx}
+                  src={photos[photoIdx]}
+                  alt={`${product.name} photo ${photoIdx + 1}`}
+                  className="w-full h-full object-cover transition-opacity duration-200"
+                />
+                {/* Nav arrows */}
+                {photos.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevPhoto}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white backdrop-blur-sm transition-all shadow"
+                      aria-label="Previous photo"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={nextPhoto}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white backdrop-blur-sm transition-all shadow"
+                      aria-label="Next photo"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    {/* Counter */}
+                    <span className="absolute bottom-2 right-3 text-[11px] font-bold bg-black/40 text-white backdrop-blur-sm rounded-full px-2 py-0.5">
+                      {photoIdx + 1} / {photos.length}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* Thumbnail strip */}
+              {photos.length > 1 && (
+                <div className="flex gap-1.5 mt-2 overflow-x-auto pb-0.5">
+                  {photos.map((url, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setPhotoIdx(i)}
+                      className={`shrink-0 w-12 h-12 rounded-xl overflow-hidden border-2 transition-all ${
+                        i === photoIdx
+                          ? "border-gray-800 scale-105 shadow-md"
+                          : "border-transparent opacity-55 hover:opacity-80"
+                      }`}
+                    >
+                      <img src={url} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* ── Meta row ── */}
+          <div className={`flex gap-5 ${photos.length > 0 ? "px-6 pb-0" : "p-6"}`}>
+            {/* Placeholder icon when no photos */}
+            {photos.length === 0 && (
+              <div className="shrink-0">
                 <div className="w-36 h-36 rounded-2xl border-2 border-dashed border-gray-300 bg-white/60 flex flex-col items-center justify-center">
                   <Image className="w-9 h-9 text-gray-300" />
                   <span className="text-[10px] text-gray-400 mt-1.5">No Photo</span>
                 </div>
-              )}
-            </div>
-            {/* Meta */}
-            <div className="flex-1 min-w-0 py-1">
+              </div>
+            )}
+
+            <div className={`flex-1 min-w-0 py-1 ${photos.length > 0 ? "" : ""}`}>
               <p className={`text-[11px] font-bold uppercase tracking-widest mb-1.5 ${theme.accentText}`}>
                 {effectiveConfig.icon} {effectiveConfig.label}
               </p>
@@ -162,7 +241,7 @@ export function ProductViewDialog({ product, onClose, effectiveConfig, onEdit }:
           </div>
 
           {/* Summary stats bar */}
-          <div className="grid grid-cols-4 border-t border-white/50 bg-white/30 backdrop-blur-sm divide-x divide-white/50">
+          <div className="grid grid-cols-4 border-t border-white/50 bg-white/30 backdrop-blur-sm divide-x divide-white/50 mt-4">
             {[
               { label: "Total Stock",  value: `${totalStock}`, sub: product.unit },
               { label: "Variants",     value: `${variants.length || 1}` },

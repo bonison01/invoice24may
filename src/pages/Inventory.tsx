@@ -14,13 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import {
   Plus, Edit, Trash2, Search, AlertTriangle, Package,
-  Upload, Download, CheckCircle, XCircle, FileText, FileDown,
+  Upload, CheckCircle, XCircle, FileText, FileDown,
   Building2, Settings2, Camera, X, Image,
   Copy, ExternalLink, Store, Link,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
 import { useCompany } from "@/hooks/useCompany";
+import { useRole } from "@/hooks/useRole";
 
 export interface InventoryProduct {
   id: string;
@@ -170,18 +171,18 @@ function parseCSV(text: string): string[][] {
   });
 }
 
+const MAX_PHOTOS = 5;
+
 const Inventory = () => {
   const { user } = useAuth();
   const { activeCompany } = useCompany();
   const ownerId = useActiveOwnerId();
+  const { canDelete } = useRole(); // ← role guard
 
   // ── Public store link ──────────────────────────────────
-  // Uses the logged-in user's ID (not ownerId / active company),
-  // because the public store is always YOUR store.
   const publicStoreUrl = user
     ? `${window.location.origin}/store/${user.id}`
     : "";
-
   const [linkCopied, setLinkCopied] = useState(false);
 
   const handleCopyStoreLink = () => {
@@ -241,7 +242,6 @@ const Inventory = () => {
 
   // ── Photo ──────────────────────────────────────────────
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [photoPreview, setPhotoPreview] = useState("");
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const makeDefaultVariant = () => ({
@@ -250,12 +250,27 @@ const Inventory = () => {
     ...effectiveConfig.defaultVariant,
   });
 
+  // ── Form state — photo_urls is now an array ────────────
   const [formData, setFormData] = useState({
     name: "", description: "", sku: "", unit_price: 0, cost_price: 0,
     current_stock: 0, min_stock_level: 0, max_stock_level: 0,
-    unit: "piece", category: "", barcode: "", hsn_code: "", photo_url: "",
+    unit: "piece", category: "", barcode: "", hsn_code: "",
+    photo_urls: [] as string[],
     variants: [] as VariantRow[],
   });
+
+  // ── Parse photo_url field — handles old single-URL strings + new JSON arrays ──
+  const parsePhotoUrls = (product: InventoryProduct): string[] => {
+    const raw = product.photo_url;
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      return [raw];
+    } catch {
+      return [raw];
+    }
+  };
 
   // ── Load saved settings ────────────────────────────────
   useEffect(() => {
@@ -311,26 +326,46 @@ const Inventory = () => {
   const getVariantLabel = (variant: VariantRow) =>
     effectiveConfig.variantFields.map((f) => variant[f.key]).filter(Boolean).slice(0, 3).join(" / ") || "Default";
 
-  // ── Photo upload ───────────────────────────────────────
-  const handlePhotoUpload = async (file: File) => {
+  // ── Multi-photo upload ─────────────────────────────────
+  const handlePhotoUpload = async (files: FileList) => {
     if (!user) return;
-    if (!file.type.startsWith("image/")) { toast({ title: "Invalid file", description: "Please upload an image.", variant: "destructive" }); return; }
-    if (file.size > 5 * 1024 * 1024) { toast({ title: "File too large", description: "Max 5MB.", variant: "destructive" }); return; }
+    const remaining = MAX_PHOTOS - formData.photo_urls.length;
+    if (remaining <= 0) {
+      toast({ title: "Limit reached", description: `Max ${MAX_PHOTOS} photos per product.`, variant: "destructive" });
+      return;
+    }
+    const toUpload = Array.from(files).slice(0, remaining);
     setUploadingPhoto(true);
-    try {
-      const ext = file.name.split(".").pop();
-      const fileName = `${ownerId}/products/${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("business-docs").upload(fileName, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from("business-docs").getPublicUrl(fileName);
-      setFormData((p) => ({ ...p, photo_url: publicUrl }));
-      setPhotoPreview(publicUrl);
-      toast({ title: "Photo uploaded ✅" });
-    } catch {
-      toast({ title: "Upload failed", description: "Try again.", variant: "destructive" });
+    const uploaded: string[] = [];
+    for (const file of toUpload) {
+      if (!file.type.startsWith("image/")) {
+        toast({ title: `${file.name} is not an image`, variant: "destructive" });
+        continue;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: `${file.name} too large`, description: "Max 5MB per photo.", variant: "destructive" });
+        continue;
+      }
+      try {
+        const ext = file.name.split(".").pop();
+        const fileName = `${ownerId}/products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from("business-docs").upload(fileName, file, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from("business-docs").getPublicUrl(fileName);
+        uploaded.push(publicUrl);
+      } catch {
+        toast({ title: `Failed to upload ${file.name}`, variant: "destructive" });
+      }
+    }
+    if (uploaded.length) {
+      setFormData((p) => ({ ...p, photo_urls: [...p.photo_urls, ...uploaded] }));
+      toast({ title: `${uploaded.length} photo${uploaded.length > 1 ? "s" : ""} uploaded ✅` });
     }
     setUploadingPhoto(false);
   };
+
+  const removePhoto = (index: number) =>
+    setFormData((p) => ({ ...p, photo_urls: p.photo_urls.filter((_, i) => i !== index) }));
 
   // ── Save product ───────────────────────────────────────
   const handleSaveProduct = async () => {
@@ -345,7 +380,9 @@ const Inventory = () => {
         max_stock_level: formData.max_stock_level ? parseInt(formData.max_stock_level.toString()) : null,
         unit: formData.unit, category: formData.category || null, barcode: formData.barcode || null,
         hsn_code: formData.hsn_code || null, variants: JSON.stringify(formData.variants),
-        photo_url: formData.photo_url || null, user_id: ownerId,
+        // Serialize photo_urls array as JSON; null if empty
+        photo_url: formData.photo_urls.length > 0 ? JSON.stringify(formData.photo_urls) : null,
+        user_id: ownerId,
       };
       if (editingProduct) {
         const { error } = await (supabase as any).from("inventory_products").update(data).eq("id", editingProduct.id);
@@ -360,7 +397,12 @@ const Inventory = () => {
     } catch { toast({ title: "Error", description: "Failed to save product.", variant: "destructive" }); }
   };
 
+  // ── Delete: admin-only ─────────────────────────────────
   const handleDeleteProduct = async (id: string) => {
+    if (!canDelete) {
+      toast({ title: "Access denied", description: "Only admins can delete products.", variant: "destructive" });
+      return;
+    }
     if (!confirm("Delete this product?")) return;
     try {
       const { error } = await supabase.from("inventory_products").delete().eq("id", id);
@@ -371,8 +413,14 @@ const Inventory = () => {
   };
 
   const resetForm = () => {
-    setFormData({ name: "", description: "", sku: "", unit_price: 0, cost_price: 0, current_stock: 0, min_stock_level: 0, max_stock_level: 0, unit: "piece", category: "", barcode: "", hsn_code: "", photo_url: "", variants: [makeDefaultVariant()] });
-    setPhotoPreview(""); setEditingProduct(null); setShowAddDialog(false);
+    setFormData({
+      name: "", description: "", sku: "", unit_price: 0, cost_price: 0,
+      current_stock: 0, min_stock_level: 0, max_stock_level: 0,
+      unit: "piece", category: "", barcode: "", hsn_code: "",
+      photo_urls: [],
+      variants: [makeDefaultVariant()],
+    });
+    setEditingProduct(null); setShowAddDialog(false);
   };
 
   const handleEdit = (product: InventoryProduct) => {
@@ -383,10 +431,10 @@ const Inventory = () => {
       current_stock: product.current_stock, min_stock_level: product.min_stock_level,
       max_stock_level: product.max_stock_level || 0, unit: product.unit,
       category: product.category || "", barcode: product.barcode || "",
-      hsn_code: (product as any).hsn_code || "", photo_url: product.photo_url || "",
+      hsn_code: (product as any).hsn_code || "",
+      photo_urls: parsePhotoUrls(product),
       variants: variants.length > 0 ? variants : [makeDefaultVariant()],
     });
-    setPhotoPreview(product.photo_url || "");
     setEditingProduct(product); setShowAddDialog(true);
   };
 
@@ -424,7 +472,7 @@ const Inventory = () => {
     );
   };
 
-  // ── CSV: Download sample with dynamic headers ──────────
+  // ── CSV: Download sample ───────────────────────────────
   const handleDownloadSample = () => {
     const baseHeaders = ["product_name", "description", "category", "unit"];
     const variantHeaders = effectiveConfig.variantFields.map((f) => f.key);
@@ -540,36 +588,18 @@ const Inventory = () => {
                 <p className="text-[11px] text-indigo-400">Customers can browse your live inventory at this link</p>
               </div>
             </div>
-
-            {/* URL pill */}
             <div className="flex-1 flex items-center gap-2 bg-white border border-indigo-200 rounded-lg px-3 py-1.5 min-w-0">
               <Link className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               <span className="text-xs text-gray-600 font-mono truncate flex-1">{publicStoreUrl}</span>
             </div>
-
-            {/* Actions */}
             <div className="flex items-center gap-2 shrink-0">
               <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCopyStoreLink}
-                className={`h-8 text-xs border-indigo-300 transition-all ${
-                  linkCopied
-                    ? "bg-green-50 border-green-300 text-green-700"
-                    : "text-indigo-700 hover:bg-indigo-50"
-                }`}
+                size="sm" variant="outline" onClick={handleCopyStoreLink}
+                className={`h-8 text-xs border-indigo-300 transition-all ${linkCopied ? "bg-green-50 border-green-300 text-green-700" : "text-indigo-700 hover:bg-indigo-50"}`}
               >
-                {linkCopied ? (
-                  <><CheckCircle className="w-3.5 h-3.5 mr-1.5" />Copied!</>
-                ) : (
-                  <><Copy className="w-3.5 h-3.5 mr-1.5" />Copy Link</>
-                )}
+                {linkCopied ? <><CheckCircle className="w-3.5 h-3.5 mr-1.5" />Copied!</> : <><Copy className="w-3.5 h-3.5 mr-1.5" />Copy Link</>}
               </Button>
-              <Button
-                size="sm"
-                onClick={handleOpenStore}
-                className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
-              >
+              <Button size="sm" onClick={handleOpenStore} className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white">
                 <ExternalLink className="w-3.5 h-3.5 mr-1.5" />Preview Store
               </Button>
             </div>
@@ -670,7 +700,6 @@ const Inventory = () => {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span className="flex items-center"><Package className="w-5 h-5 mr-2" />Products ({filteredProducts.length})</span>
-              {/* Compact store link shortcut in table header */}
               {user && (
                 <button
                   onClick={handleCopyStoreLink}
@@ -705,11 +734,24 @@ const Inventory = () => {
                     {filteredProducts.map((product) => {
                       const ss = getStockStatus(product);
                       const pv = parseVariants(product);
+                      const photos = parsePhotoUrls(product);
                       return (
                         <TableRow key={product.id}>
+                          {/* ── Photo cell: first photo + count badge ── */}
                           <TableCell>
-                            {product.photo_url ? (
-                              <img src={product.photo_url} alt={product.name} className="w-12 h-12 object-cover rounded-lg border border-gray-200" />
+                            {photos.length > 0 ? (
+                              <div className="relative w-12 h-12">
+                                <img
+                                  src={photos[0]}
+                                  alt={product.name}
+                                  className="w-12 h-12 object-cover rounded-lg border border-gray-200"
+                                />
+                                {photos.length > 1 && (
+                                  <span className="absolute -bottom-1 -right-1 bg-gray-700 text-white text-[10px] font-semibold rounded-full w-4 h-4 flex items-center justify-center shadow">
+                                    {photos.length}
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <div className="w-12 h-12 rounded-lg border border-dashed border-gray-200 flex items-center justify-center bg-gray-50">
                                 <Image className="w-5 h-5 text-gray-300" />
@@ -745,7 +787,16 @@ const Inventory = () => {
                           <TableCell>
                             <div className="flex gap-2">
                               <Button size="sm" variant="outline" onClick={() => handleEdit(product)}><Edit className="w-4 h-4" /></Button>
-                              <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => handleDeleteProduct(product.id)}><Trash2 className="w-4 h-4" /></Button>
+                              {/* ── Delete button: admins only ── */}
+                              {canDelete && (
+                                <Button
+                                  size="sm" variant="outline"
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => handleDeleteProduct(product.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                               <Button size="sm" onClick={() => setViewProduct(product)}>View</Button>
                             </div>
                           </TableCell>
@@ -823,7 +874,10 @@ const Inventory = () => {
                       {field.options && <span className="text-xs text-gray-400">({field.options.slice(0, 3).join(", ")}{field.options.length > 3 ? "…" : ""})</span>}
                       <span className="text-xs bg-green-200 text-green-700 rounded px-1.5 py-0.5">custom</span>
                     </div>
-                    <button onClick={() => { const updated = customFields.filter((_, i) => i !== idx); saveCustomFields(updated); toast({ title: `"${field.label}" removed` }); }} className="text-red-400 hover:text-red-600 transition-colors p-1 ml-2 shrink-0">
+                    <button
+                      onClick={() => { const updated = customFields.filter((_, i) => i !== idx); saveCustomFields(updated); toast({ title: `"${field.label}" removed` }); }}
+                      className="text-red-400 hover:text-red-600 transition-colors p-1 ml-2 shrink-0"
+                    >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -857,7 +911,8 @@ const Inventory = () => {
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"
+                    <Button
+                      size="sm" className="bg-green-600 hover:bg-green-700 text-white"
                       onClick={() => {
                         if (!newFieldLabel.trim()) { toast({ title: "Label required", variant: "destructive" }); return; }
                         if (newFieldType === "select" && !newFieldOptions.trim()) { toast({ title: "Add at least one option", variant: "destructive" }); return; }
@@ -886,9 +941,29 @@ const Inventory = () => {
         <Dialog open={!!viewProduct} onOpenChange={() => setViewProduct(null)}>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>{viewProduct?.name}</DialogTitle></DialogHeader>
-            {viewProduct?.photo_url && (
-              <img src={viewProduct.photo_url} alt={viewProduct.name} className="w-full h-48 object-cover rounded-lg border border-gray-200" />
-            )}
+            {/* ── Photo gallery ── */}
+            {viewProduct && (() => {
+              const photos = parsePhotoUrls(viewProduct);
+              if (photos.length === 0) return null;
+              return (
+                <div className={`grid gap-2 ${photos.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                  {photos.map((url, i) => (
+                    <div key={i} className="relative">
+                      <img
+                        src={url}
+                        alt={`${viewProduct.name} photo ${i + 1}`}
+                        className={`w-full object-cover rounded-lg border border-gray-200 ${photos.length === 1 ? "h-52" : "h-36"}`}
+                      />
+                      {i === 0 && photos.length > 1 && (
+                        <span className="absolute top-1.5 left-1.5 bg-black/60 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                          Main
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <div className="space-y-3">
               {viewProduct && parseVariants(viewProduct).map((v) => (
                 <div key={v.id} className="border p-3 rounded-md flex justify-between">
@@ -980,33 +1055,79 @@ const Inventory = () => {
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Photo */}
+
+              {/* ── Multi-Photo Upload ── */}
               <div className="md:col-span-2">
-                <Label className="mb-2 block">Product Photo</Label>
-                <div className="flex items-center gap-4">
-                  {photoPreview ? (
-                    <div className="relative">
-                      <img src={photoPreview} alt="Product" className="w-24 h-24 object-cover rounded-xl border border-gray-200 shadow-sm" />
-                      <button type="button" onClick={() => { setPhotoPreview(""); setFormData((p) => ({ ...p, photo_url: "" })); }} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600">
-                        <X className="w-3 h-3 text-white" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center bg-gray-50 cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors" onClick={() => photoInputRef.current?.click()}>
-                      <Camera className="w-6 h-6 text-gray-400" />
-                      <span className="text-xs text-gray-400 mt-1">Add Photo</span>
+                <Label className="mb-2 block">
+                  Product Photos
+                  <span className="ml-2 text-xs text-gray-400 font-normal">
+                    {formData.photo_urls.length}/{MAX_PHOTOS} — first photo is shown as the thumbnail
+                  </span>
+                </Label>
+                <div className="space-y-3">
+                  {/* Thumbnail grid of existing photos */}
+                  {formData.photo_urls.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.photo_urls.map((url, i) => (
+                        <div key={i} className="relative group">
+                          <img
+                            src={url}
+                            alt={`Product photo ${i + 1}`}
+                            className="w-20 h-20 object-cover rounded-xl border border-gray-200 shadow-sm"
+                          />
+                          {i === 0 && (
+                            <span className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] text-center rounded-b-xl py-0.5 pointer-events-none">
+                              Main
+                            </span>
+                          )}
+                          {/* Remove button — appears on hover */}
+                          <button
+                            type="button"
+                            onClick={() => removePhoto(i)}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                          >
+                            <X className="w-3 h-3 text-white" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <div className="flex flex-col gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto}>
-                      <Upload className="w-4 h-4 mr-2" />
-                      {uploadingPhoto ? "Uploading..." : photoPreview ? "Change Photo" : "Upload Photo"}
-                    </Button>
-                    <p className="text-xs text-gray-400">JPG, PNG up to 5MB</p>
-                  </div>
-                  <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ""; }} />
+                  {/* Upload trigger — only shown when under the limit */}
+                  {formData.photo_urls.length < MAX_PHOTOS && (
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center bg-gray-50 cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors shrink-0"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <Camera className="w-6 h-6 text-gray-400" />
+                        <span className="text-xs text-gray-400 mt-1">Add</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Button
+                          type="button" variant="outline" size="sm"
+                          onClick={() => photoInputRef.current?.click()}
+                          disabled={uploadingPhoto}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          {uploadingPhoto ? "Uploading…" : "Upload Photos"}
+                        </Button>
+                        <p className="text-xs text-gray-400">
+                          JPG, PNG up to 5MB each · Max {MAX_PHOTOS} photos · Select multiple at once
+                        </p>
+                      </div>
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => { if (e.target.files?.length) handlePhotoUpload(e.target.files); e.target.value = ""; }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
+
               {/* Basic info */}
               <div>
                 <Label>Product Name *</Label>
@@ -1038,6 +1159,7 @@ const Inventory = () => {
                   </SelectContent>
                 </Select>
               </div>
+
               {/* Variants */}
               <div className="md:col-span-2 space-y-3">
                 <div className="flex items-center justify-between">

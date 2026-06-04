@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
 import { useCompany } from "@/hooks/useCompany";
+import { useRole } from "@/hooks/useRole"; // ← add
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +29,7 @@ const Customers = () => {
   const { user } = useAuth();
   const ownerId = useActiveOwnerId();
   const { activeCompany } = useCompany();
+  const { canDelete } = useRole(); // ← add
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -90,6 +92,10 @@ const Customers = () => {
   };
 
   const handleDelete = async (customerId: string) => {
+    if (!canDelete) { // ← guard
+      toast({ title: "Access denied", description: "Only admins can delete customers.", variant: "destructive" });
+      return;
+    }
     if (!ownerId) return;
     const { error } = await supabase.from("customers").delete().eq("id", customerId).eq("user_id", ownerId);
     if (error) {
@@ -127,7 +133,6 @@ const Customers = () => {
             </div>
           </div>
 
-          {/* Only allow adding customers if viewing own company or manager+ */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button
@@ -172,7 +177,7 @@ const Customers = () => {
           </Dialog>
         </div>
 
-        {/* Company context banner */}
+        {/* ── Company context banner ── */}
         {isViewing && (
           <div className="mb-6 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
             <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
@@ -216,9 +221,12 @@ const Customers = () => {
                           <Button size="sm" variant="outline" onClick={() => handleEdit(customer)}>
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleDelete(customer.id)} className="text-red-600 hover:text-red-700">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {/* ── Delete: admins only ── */}
+                          {canDelete && (
+                            <Button size="sm" variant="outline" onClick={() => handleDelete(customer.id)} className="text-red-600 hover:text-red-700">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
