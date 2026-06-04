@@ -68,6 +68,7 @@ export interface Invoice {
   paymentInstructions: string;
   thankYouNote: string;
   inclusiveTax: boolean;
+  created_by?: string | null; // ← added
 }
 
 // ─────────────────────────────────────────────────────────
@@ -392,6 +393,7 @@ const Invoices = () => {
     paymentInstructions: "Payment due within 10 days. Thank you for your business!",
     thankYouNote: "Thank you for choosing our services.",
     inclusiveTax: false,
+    created_by: null, // ← added
   });
 
   useEffect(() => { calculateTotals(); }, [invoice.items, invoice.taxRate, invoice.discountType, invoice.discountValue, invoice.inclusiveTax]);
@@ -527,6 +529,11 @@ const Invoices = () => {
     if (!invoice.customer) { toast({ title: "Customer required", description: "Please select a customer before saving.", variant: "destructive" }); return; }
     setIsLoading(true);
     try {
+      // ── Resolve created_by: only set when a staff member (non-owner) creates the invoice ──
+      const createdBy = activeCompany && !activeCompany.isOwn
+        ? (user.user_metadata?.full_name ?? user.email ?? user.id ?? "Unknown")
+        : null;
+
       const invoiceData = {
         user_id: ownerId,
         invoice_number: invoice.invoiceNumber,
@@ -549,6 +556,7 @@ const Invoices = () => {
         signature_url: businessSettings?.signature_url || "",
         number_of_days: invoice.numberOfDays,
         payment_status: invoice.paymentStatus,
+        created_by: createdBy, // ← added
       };
       const { error } = await supabase.from("saved_invoices").insert(invoiceData);
       if (error) throw error;

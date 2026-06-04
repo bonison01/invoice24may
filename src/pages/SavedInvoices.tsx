@@ -38,7 +38,7 @@ import {
 import type { Invoice } from "@/pages/Invoices";
 import { useCompany } from "@/hooks/useCompany";
 import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
-import { useRole } from "@/hooks/useRole"; // ← add
+import { useRole } from "@/hooks/useRole";
 
 interface SavedInvoice {
   id: string;
@@ -64,6 +64,7 @@ interface SavedInvoice {
   signature_url?: string;
   number_of_days?: number;
   payment_status?: "Paid" | "Unpaid" | "Partial";
+  created_by?: string | null; // ← added
 }
 
 const SavedInvoices = () => {
@@ -71,7 +72,7 @@ const SavedInvoices = () => {
   const { user } = useAuth();
   const { activeCompany } = useCompany();
   const ownerId = useActiveOwnerId();
-  const { canDelete } = useRole(); // ← add
+  const { canDelete } = useRole();
 
   const [invoices, setInvoices] = useState<SavedInvoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -168,7 +169,7 @@ const SavedInvoices = () => {
   };
 
   const deleteInvoice = async (invoiceId: string) => {
-    if (!canDelete) { // ← guard
+    if (!canDelete) {
       toast({ title: "Access denied", description: "Only admins can delete invoices.", variant: "destructive" });
       return;
     }
@@ -394,13 +395,14 @@ const SavedInvoices = () => {
                     <TableHead>Due</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Total</TableHead>
+                    <TableHead>Created By</TableHead> {/* ← added */}
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredInvoices.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-gray-400">
+                      <TableCell colSpan={8} className="text-center py-12 text-gray-400">
                         No invoices found.
                       </TableCell>
                     </TableRow>
@@ -446,6 +448,18 @@ const SavedInvoices = () => {
                             </Select>
                           </TableCell>
                           <TableCell className="font-semibold">₹{invoice.total.toFixed(2)}</TableCell>
+
+                          {/* ── Created By ── */}
+                          <TableCell>
+                            {invoice.created_by ? (
+                              <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                {invoice.created_by}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">Owner</span>
+                            )}
+                          </TableCell>
+
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               <Button size="sm" variant="outline" onClick={() => viewInvoice(invoice)}>
@@ -454,7 +468,6 @@ const SavedInvoices = () => {
                               <Button size="sm" variant="outline" onClick={() => downloadInvoice(invoice)}>
                                 <Download className="w-4 h-4 mr-1" /> Download
                               </Button>
-                              {/* ── Delete: admins only ── */}
                               {canDelete && (
                                 <Button size="sm" variant="destructive" onClick={() => deleteInvoice(invoice.id)}>
                                   <Trash2 className="w-4 h-4" />

@@ -40,14 +40,6 @@ const Auth = () => {
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
 
-  // ── SIGN UP STATE ──────────────────────────────────
-  const [signUpForm, setSignUpForm] = useState({
-    full_name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
-
   const [requestForm, setRequestForm] = useState({
     full_name: "",
     address: "",
@@ -91,60 +83,6 @@ const Auth = () => {
       toast({
         title: "Welcome Back ✅",
         description: "You have logged in successfully.",
-      });
-      navigate("/");
-    }
-    setIsLoading(false);
-  };
-
-  // ── SIGN UP ────────────────────────────────────────
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (signUpForm.password !== signUpForm.confirmPassword) {
-      toast({
-        title: "Mismatch ❌",
-        description: "Passwords do not match.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (signUpForm.password.length < 6) {
-      toast({
-        title: "Too Short ❌",
-        description: "Password must be at least 6 characters.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email: signUpForm.email,
-      password: signUpForm.password,
-      options: {
-        data: { full_name: signUpForm.full_name },
-      },
-    });
-
-    if (error) {
-      toast({
-        title: "Sign Up Failed ❌",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else if (data.user && !data.session) {
-      // Email confirmation required
-      toast({
-        title: "Check Your Email ✅",
-        description: "A confirmation link has been sent to your email address.",
-      });
-      setSignUpForm({ full_name: "", email: "", password: "", confirmPassword: "" });
-    } else {
-      // Auto-confirmed (e.g. email confirmations disabled in Supabase)
-      toast({
-        title: "Account Created ✅",
-        description: "You have been signed up and logged in.",
       });
       navigate("/");
     }
@@ -268,6 +206,7 @@ const Auth = () => {
         .insert([requestForm]);
       if (error) throw error;
 
+      // Notify admin via email
       await supabase.functions.invoke("send-otp", {
         body: { _notify_admin: true, requestForm },
       });
@@ -297,6 +236,7 @@ const Auth = () => {
   // ── FORGOT PASSWORD UI ─────────────────────────────
   const renderForgotPassword = () => (
     <div className="space-y-4">
+      {/* Back button */}
       <button
         type="button"
         onClick={handleForgotBack}
@@ -306,6 +246,7 @@ const Auth = () => {
         Back
       </button>
 
+      {/* Progress indicator */}
       <div className="flex items-center justify-center gap-2 mb-2">
         {(["email", "otp", "newPassword"] as ForgotStep[]).map((step, i) => (
           <div key={step} className="flex items-center gap-2">
@@ -333,6 +274,7 @@ const Auth = () => {
         ))}
       </div>
 
+      {/* STEP 1: Email */}
       {forgotStep === "email" && (
         <form onSubmit={handleSendOtp} className="space-y-4">
           <div className="text-center">
@@ -367,6 +309,7 @@ const Auth = () => {
         </form>
       )}
 
+      {/* STEP 2: OTP */}
       {forgotStep === "otp" && (
         <form onSubmit={handleVerifyOtp} className="space-y-4">
           <div className="text-center">
@@ -416,6 +359,7 @@ const Auth = () => {
         </form>
       )}
 
+      {/* STEP 3: New Password */}
       {forgotStep === "newPassword" && (
         <form onSubmit={handleResetPassword} className="space-y-4">
           <div className="text-center">
@@ -475,6 +419,7 @@ const Auth = () => {
       <Navbar />
       <div className="w-full max-w-md">
 
+        {/* HEADER */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
             <FileText className="w-8 h-8 text-green-600" />
@@ -485,13 +430,14 @@ const Auth = () => {
           <p className="text-gray-600">Professional invoicing made simple</p>
         </div>
 
+        {/* CARD */}
         <Card className="shadow-xl">
           <CardHeader>
             <CardTitle>Welcome</CardTitle>
             <CardDescription>
               {showForgot
                 ? "Reset your password"
-                : "Sign in, create an account, or request access"}
+                : "Sign in or request account access"}
             </CardDescription>
           </CardHeader>
 
@@ -500,16 +446,17 @@ const Auth = () => {
               renderForgotPassword()
             ) : (
               <Tabs defaultValue="login" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="login">Login</TabsTrigger>
-                  <TabsTrigger value="signup">Sign Up</TabsTrigger>
-                  <TabsTrigger value="register">Request</TabsTrigger>
+                  <TabsTrigger value="register">Request Access</TabsTrigger>
                 </TabsList>
 
                 {/* LOGIN TAB */}
                 <TabsContent value="login">
                   <div className="space-y-4 pt-2">
-                    <Button
+
+                    {/* GOOGLE BUTTON */}
+                    {/* <Button
                       type="button"
                       variant="outline"
                       className="w-full flex items-center gap-3 border-gray-300 hover:bg-gray-50"
@@ -527,9 +474,10 @@ const Auth = () => {
                         </svg>
                       )}
                       {isGoogleLoading ? "Redirecting..." : "Continue with Google"}
-                    </Button>
+                    </Button> */}
 
-                    <div className="relative">
+                    {/* DIVIDER */}
+                    {/* <div className="relative">
                       <div className="absolute inset-0 flex items-center">
                         <span className="w-full border-t border-gray-200" />
                       </div>
@@ -538,8 +486,9 @@ const Auth = () => {
                           or sign in with email
                         </span>
                       </div>
-                    </div>
+                    </div> */}
 
+                    {/* EMAIL/PASSWORD FORM */}
                     <form onSubmit={handleLogin} className="space-y-4">
                       <div className="space-y-2">
                         <Label htmlFor="email">Email</Label>
@@ -590,114 +539,6 @@ const Auth = () => {
                   </div>
                 </TabsContent>
 
-                {/* SIGN UP TAB */}
-                <TabsContent value="signup">
-                  <div className="space-y-4 pt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full flex items-center gap-3 border-gray-300 hover:bg-gray-50"
-                      onClick={handleGoogleLogin}
-                      disabled={isGoogleLoading}
-                    >
-                      {isGoogleLoading ? (
-                        <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                        </svg>
-                      )}
-                      {isGoogleLoading ? "Redirecting..." : "Sign up with Google"}
-                    </Button>
-
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-gray-200" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-white px-2 text-gray-400">
-                          or sign up with email
-                        </span>
-                      </div>
-                    </div>
-
-                    <form onSubmit={handleSignUp} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="signup-name">Full Name</Label>
-                        <Input
-                          id="signup-name"
-                          type="text"
-                          placeholder="Enter your full name"
-                          value={signUpForm.full_name}
-                          onChange={(e) =>
-                            setSignUpForm({ ...signUpForm, full_name: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="signup-email">Email</Label>
-                        <Input
-                          id="signup-email"
-                          type="email"
-                          placeholder="Enter your email"
-                          value={signUpForm.email}
-                          onChange={(e) =>
-                            setSignUpForm({ ...signUpForm, email: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="signup-password">Password</Label>
-                        <Input
-                          id="signup-password"
-                          type="password"
-                          placeholder="Create a password (min. 6 characters)"
-                          value={signUpForm.password}
-                          onChange={(e) =>
-                            setSignUpForm({ ...signUpForm, password: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="signup-confirm">Confirm Password</Label>
-                        <Input
-                          id="signup-confirm"
-                          type="password"
-                          placeholder="Confirm your password"
-                          value={signUpForm.confirmPassword}
-                          onChange={(e) =>
-                            setSignUpForm({ ...signUpForm, confirmPassword: e.target.value })
-                          }
-                          required
-                        />
-                        {signUpForm.confirmPassword && signUpForm.password !== signUpForm.confirmPassword && (
-                          <p className="text-xs text-red-500">Passwords do not match.</p>
-                        )}
-                        {signUpForm.confirmPassword && signUpForm.password === signUpForm.confirmPassword && (
-                          <p className="text-xs text-green-600">Passwords match ✓</p>
-                        )}
-                      </div>
-                      <Button
-                        type="submit"
-                        className="w-full bg-gradient-to-r from-green-600 to-purple-600 hover:from-green-700 hover:to-purple-700"
-                        disabled={
-                          isLoading ||
-                          (!!signUpForm.confirmPassword &&
-                            signUpForm.password !== signUpForm.confirmPassword)
-                        }
-                      >
-                        {isLoading ? "Creating Account..." : "Create Account"}
-                      </Button>
-                    </form>
-                  </div>
-                </TabsContent>
-
                 {/* REQUEST ACCESS TAB */}
                 <TabsContent value="register">
                   <form onSubmit={handleRequestAccess} className="space-y-4">
@@ -706,7 +547,7 @@ const Auth = () => {
                         Request Account Access
                       </h3>
                       <p className="text-gray-600 text-sm">
-                        Fill in your details for admin approval.
+                        Fill in your details for approval.
                       </p>
                     </div>
                     <div className="space-y-2">
@@ -801,6 +642,7 @@ const Auth = () => {
           </CardContent>
         </Card>
 
+        {/* GUEST */}
         <div className="text-center mt-6">
           <Button
             variant="outline"
