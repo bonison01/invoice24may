@@ -1,3 +1,4 @@
+// src/pages/Inventory.tsx
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import {
   Plus, Edit, Trash2, Search, AlertTriangle, Package,
-  Upload, Download, CheckCircle, XCircle, FileText, FileDown, Building2,
+  Upload, Download, CheckCircle, XCircle, FileText, FileDown,
+  Building2, Settings2, Camera, X, Image,
+  Copy, ExternalLink, Store, Link,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useActiveOwnerId } from "@/hooks/useActiveOwnerId";
@@ -36,18 +39,17 @@ export interface InventoryProduct {
   created_at: string;
   updated_at: string;
   variants?: string;
+  photo_url?: string | null;
 }
 
 interface VariantRow {
   id: string;
-  size: string;
-  color: string;
-  brand: string;
   stock_quantity: number;
   unit_price: number;
   cost_price: number;
   hsn_code: string;
   min_stock_level: number;
+  [key: string]: any;
 }
 
 interface CSVPreviewRow {
@@ -56,9 +58,6 @@ interface CSVPreviewRow {
   description: string;
   category: string;
   unit: string;
-  size: string;
-  color: string;
-  brand: string;
   stock_quantity: number;
   unit_price: number;
   cost_price: number;
@@ -66,40 +65,102 @@ interface CSVPreviewRow {
   min_stock_level: number;
   errors: string[];
   valid: boolean;
+  [key: string]: any;
 }
 
-const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
-const COLORS = ["Red", "Green", "Blue", "Black", "White", "Yellow", "Grey", "Brown"];
-const BRANDS = ["Unbranded", "Other"];
+type FieldType = "text" | "select" | "number";
 
-const CSV_HEADERS = [
-  "product_name", "description", "category", "unit",
-  "size", "color", "brand", "stock_quantity",
-  "unit_price", "cost_price", "hsn_code", "min_stock_level",
-];
+interface VariantField {
+  key: string;
+  label: string;
+  type: FieldType;
+  options?: string[];
+  placeholder?: string;
+}
 
-const CSV_SAMPLES = [
-  ["Cotton T-Shirt", "Premium cotton tee", "clothing", "piece", "M", "Black", "Unbranded", "50", "499", "250", "6109", "10"],
-  ["Cotton T-Shirt", "Premium cotton tee", "clothing", "piece", "L", "Black", "Unbranded", "30", "499", "250", "6109", "10"],
-  ["Cotton T-Shirt", "Premium cotton tee", "clothing", "piece", "S", "White", "Unbranded", "20", "499", "250", "6109", "5"],
-  ["Formal Trousers", "Slim fit trousers", "clothing", "piece", "M", "Grey", "Other", "15", "999", "500", "6203", "5"],
-];
+interface BusinessTypeConfig {
+  label: string;
+  icon: string;
+  variantFields: VariantField[];
+  defaultVariant: Record<string, any>;
+}
 
-// ── Pure helpers (no hooks) ──────────────────────────────────────────────────
+const BUSINESS_TYPES: Record<string, BusinessTypeConfig> = {
+  clothing: {
+    label: "Clothing & Apparel",
+    icon: "👕",
+    variantFields: [
+      { key: "size", label: "Size", type: "select", options: ["XS", "S", "M", "L", "XL", "XXL", "XXXL"] },
+      { key: "color", label: "Color", type: "select", options: ["Red", "Green", "Blue", "Black", "White", "Yellow", "Grey", "Brown", "Navy", "Pink"] },
+      { key: "brand", label: "Brand", type: "text", placeholder: "Brand name" },
+    ],
+    defaultVariant: { size: "M", color: "Black", brand: "Unbranded" },
+  },
+  electronics: {
+    label: "Electronics & Computers",
+    icon: "💻",
+    variantFields: [
+      { key: "model", label: "Model", type: "text", placeholder: "e.g. iPhone 15 Pro" },
+      { key: "storage", label: "Storage/RAM", type: "select", options: ["4GB", "8GB", "16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB"] },
+      { key: "color", label: "Color/Finish", type: "text", placeholder: "e.g. Space Grey" },
+      { key: "warranty", label: "Warranty", type: "select", options: ["No Warranty", "3 Months", "6 Months", "1 Year", "2 Years", "3 Years"] },
+    ],
+    defaultVariant: { model: "", storage: "8GB", color: "", warranty: "1 Year" },
+  },
+  food: {
+    label: "Food & Grocery",
+    icon: "🛒",
+    variantFields: [
+      { key: "weight", label: "Weight/Size", type: "text", placeholder: "e.g. 500g, 1kg" },
+      { key: "flavor", label: "Flavor/Variant", type: "text", placeholder: "e.g. Mango, Plain" },
+      { key: "pack_size", label: "Pack Size", type: "select", options: ["Single", "Pack of 2", "Pack of 6", "Pack of 12", "Bulk"] },
+    ],
+    defaultVariant: { weight: "", flavor: "", pack_size: "Single" },
+  },
+  furniture: {
+    label: "Furniture & Home",
+    icon: "🪑",
+    variantFields: [
+      { key: "material", label: "Material", type: "select", options: ["Wood", "Metal", "Plastic", "Fabric", "Leather", "Glass", "Marble"] },
+      { key: "color", label: "Color/Finish", type: "text", placeholder: "e.g. Walnut Brown" },
+      { key: "dimensions", label: "Dimensions", type: "text", placeholder: "e.g. 120x60x75 cm" },
+    ],
+    defaultVariant: { material: "Wood", color: "", dimensions: "" },
+  },
+  medicine: {
+    label: "Medicine & Pharma",
+    icon: "💊",
+    variantFields: [
+      { key: "dosage", label: "Dosage", type: "text", placeholder: "e.g. 500mg, 10ml" },
+      { key: "form", label: "Form", type: "select", options: ["Tablet", "Capsule", "Syrup", "Injection", "Cream", "Drops", "Powder"] },
+      { key: "pack_size", label: "Pack Size", type: "text", placeholder: "e.g. Strip of 10" },
+      { key: "expiry_months", label: "Shelf Life (months)", type: "number", placeholder: "12" },
+    ],
+    defaultVariant: { dosage: "", form: "Tablet", pack_size: "", expiry_months: 12 },
+  },
+  custom: {
+    label: "Custom / Other",
+    icon: "⚙️",
+    variantFields: [
+      { key: "variant_name", label: "Variant Name", type: "text", placeholder: "e.g. Large, Red, 2024 Model" },
+      { key: "spec1", label: "Spec 1", type: "text", placeholder: "Custom field" },
+      { key: "spec2", label: "Spec 2", type: "text", placeholder: "Custom field" },
+    ],
+    defaultVariant: { variant_name: "", spec1: "", spec2: "" },
+  },
+};
 
 function downloadCSV(filename: string, rows: string[][]) {
   const content = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
   const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename; a.click();
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
 
 function parseCSV(text: string): string[][] {
   return text.trim().split(/\r?\n/).map((line) => {
-    const row: string[] = [];
-    let current = ""; let inQuotes = false;
+    const row: string[] = []; let current = ""; let inQuotes = false;
     for (const ch of line) {
       if (ch === '"') { inQuotes = !inQuotes; }
       else if (ch === "," && !inQuotes) { row.push(current.trim()); current = ""; }
@@ -109,66 +170,115 @@ function parseCSV(text: string): string[][] {
   });
 }
 
-function validateCSVRow(row: CSVPreviewRow): string[] {
-  const errors: string[] = [];
-  if (!row.product_name) errors.push("Product name required");
-  if (!row.size) errors.push("Size required");
-  if (!row.color) errors.push("Color required");
-  if (isNaN(row.unit_price) || row.unit_price < 0) errors.push("Invalid unit price");
-  if (isNaN(row.stock_quantity) || row.stock_quantity < 0) errors.push("Invalid stock qty");
-  return errors;
-}
-
-// ── Component ────────────────────────────────────────────────────────────────
-
 const Inventory = () => {
-  // ✅ All hooks at the top level of the component
   const { user } = useAuth();
-  const { activeCompany } = useCompany(); // ✅ FIXED: moved inside component
+  const { activeCompany } = useCompany();
   const ownerId = useActiveOwnerId();
 
+  // ── Public store link ──────────────────────────────────
+  // Uses the logged-in user's ID (not ownerId / active company),
+  // because the public store is always YOUR store.
+  const publicStoreUrl = user
+    ? `${window.location.origin}/store/${user.id}`
+    : "";
+
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const handleCopyStoreLink = () => {
+    if (!publicStoreUrl) return;
+    navigator.clipboard.writeText(publicStoreUrl).then(() => {
+      setLinkCopied(true);
+      toast({
+        title: "Store link copied! 🔗",
+        description: "Share this link with your customers to show them your live catalog.",
+      });
+      setTimeout(() => setLinkCopied(false), 2500);
+    });
+  };
+
+  const handleOpenStore = () => {
+    if (publicStoreUrl) window.open(publicStoreUrl, "_blank");
+  };
+
+  // ── Business type & custom fields ─────────────────────
+  const [businessType, setBusinessType] = useState("clothing");
+  const [showTypeSelector, setShowTypeSelector] = useState(false);
+  const [customFields, setCustomFields] = useState<VariantField[]>([]);
+  const [showCustomEditor, setShowCustomEditor] = useState(false);
+  const [newFieldLabel, setNewFieldLabel] = useState("");
+  const [newFieldType, setNewFieldType] = useState<FieldType>("text");
+  const [newFieldOptions, setNewFieldOptions] = useState("");
+
+  const config = BUSINESS_TYPES[businessType];
+
+  const effectiveConfig = {
+    ...config,
+    variantFields: [...config.variantFields, ...customFields],
+    defaultVariant: {
+      ...config.defaultVariant,
+      ...Object.fromEntries(customFields.map((f) => [f.key, f.type === "number" ? 0 : ""])),
+    },
+  };
+
+  // ── Products state ─────────────────────────────────────
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<InventoryProduct[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [stockFilter, setStockFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [stockFilter, setStockFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingProduct, setEditingProduct] = useState<InventoryProduct | null>(null);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
   const [viewProduct, setViewProduct] = useState<InventoryProduct | null>(null);
 
+  // ── CSV ────────────────────────────────────────────────
   const [showCSVDialog, setShowCSVDialog] = useState(false);
   const [csvPreviewRows, setCSVPreviewRows] = useState<CSVPreviewRow[]>([]);
   const [csvImporting, setCSVImporting] = useState(false);
   const [csvFileName, setCSVFileName] = useState("");
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  const defaultVariant = () => ({
+  // ── Photo ──────────────────────────────────────────────
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const makeDefaultVariant = () => ({
     id: Date.now().toString() + Math.random(),
-    size: "M", color: "Black", brand: "Unbranded",
     stock_quantity: 0, unit_price: 0, cost_price: 0, hsn_code: "", min_stock_level: 0,
+    ...effectiveConfig.defaultVariant,
   });
 
   const [formData, setFormData] = useState({
     name: "", description: "", sku: "", unit_price: 0, cost_price: 0,
     current_stock: 0, min_stock_level: 0, max_stock_level: 0,
-    unit: "piece", category: "", barcode: "", hsn_code: "",
-    variants: [defaultVariant()],
+    unit: "piece", category: "", barcode: "", hsn_code: "", photo_url: "",
+    variants: [] as VariantRow[],
   });
+
+  // ── Load saved settings ────────────────────────────────
+  useEffect(() => {
+    if (!ownerId) return;
+    const savedType = localStorage.getItem(`inventory_business_type_${ownerId}`);
+    if (savedType && BUSINESS_TYPES[savedType]) setBusinessType(savedType);
+    const savedFields = localStorage.getItem(`inventory_custom_fields_${ownerId}`);
+    if (savedFields) { try { setCustomFields(JSON.parse(savedFields)); } catch {} }
+  }, [ownerId]);
 
   useEffect(() => { if (ownerId) { fetchProducts(); fetchLowStockProducts(); } }, [ownerId]);
   useEffect(() => { filterProducts(); }, [products, searchTerm, categoryFilter, stockFilter]);
+
+  const saveCustomFields = (fields: VariantField[]) => {
+    setCustomFields(fields);
+    localStorage.setItem(`inventory_custom_fields_${ownerId}`, JSON.stringify(fields));
+  };
 
   const fetchProducts = async () => {
     if (!ownerId) return;
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("inventory_products")
-        .select("*")
-        .eq("user_id", ownerId)
-        .order("name");
+      const { data, error } = await supabase.from("inventory_products").select("*").eq("user_id", ownerId).order("name");
       if (error) throw error;
       setProducts(data || []);
     } catch {
@@ -198,27 +308,53 @@ const Inventory = () => {
   const getTotalVariantStock = () => formData.variants.reduce((s, v) => s + (v.stock_quantity || 0), 0);
   const parseVariants = (product: any): VariantRow[] => { try { return product.variants ? JSON.parse(product.variants) : []; } catch { return []; } };
 
+  const getVariantLabel = (variant: VariantRow) =>
+    effectiveConfig.variantFields.map((f) => variant[f.key]).filter(Boolean).slice(0, 3).join(" / ") || "Default";
+
+  // ── Photo upload ───────────────────────────────────────
+  const handlePhotoUpload = async (file: File) => {
+    if (!user) return;
+    if (!file.type.startsWith("image/")) { toast({ title: "Invalid file", description: "Please upload an image.", variant: "destructive" }); return; }
+    if (file.size > 5 * 1024 * 1024) { toast({ title: "File too large", description: "Max 5MB.", variant: "destructive" }); return; }
+    setUploadingPhoto(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const fileName = `${ownerId}/products/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("business-docs").upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from("business-docs").getPublicUrl(fileName);
+      setFormData((p) => ({ ...p, photo_url: publicUrl }));
+      setPhotoPreview(publicUrl);
+      toast({ title: "Photo uploaded ✅" });
+    } catch {
+      toast({ title: "Upload failed", description: "Try again.", variant: "destructive" });
+    }
+    setUploadingPhoto(false);
+  };
+
+  // ── Save product ───────────────────────────────────────
   const handleSaveProduct = async () => {
-    if (!ownerId) return;
+    if (!ownerId || !formData.name.trim()) return;
     try {
       const data = {
-        name: formData.name, description: formData.description, sku: formData.sku,
-        unit_price: parseFloat(formData.unit_price.toString()),
+        name: formData.name, description: formData.description || null, sku: formData.sku || null,
+        unit_price: parseFloat(formData.unit_price.toString()) || 0,
         cost_price: formData.cost_price ? parseFloat(formData.cost_price.toString()) : null,
         current_stock: getTotalVariantStock(),
-        min_stock_level: parseInt(formData.min_stock_level.toString()),
+        min_stock_level: parseInt(formData.min_stock_level.toString()) || 0,
         max_stock_level: formData.max_stock_level ? parseInt(formData.max_stock_level.toString()) : null,
-        unit: formData.unit, category: formData.category, barcode: formData.barcode,
-        hsn_code: formData.hsn_code, variants: JSON.stringify(formData.variants), user_id: ownerId,
+        unit: formData.unit, category: formData.category || null, barcode: formData.barcode || null,
+        hsn_code: formData.hsn_code || null, variants: JSON.stringify(formData.variants),
+        photo_url: formData.photo_url || null, user_id: ownerId,
       };
       if (editingProduct) {
-        const { error } = await supabase.from("inventory_products").update(data).eq("id", editingProduct.id);
+        const { error } = await (supabase as any).from("inventory_products").update(data).eq("id", editingProduct.id);
         if (error) throw error;
-        toast({ title: "Success", description: "Product updated." });
+        toast({ title: "Product updated ✅" });
       } else {
-        const { error } = await supabase.from("inventory_products").insert(data);
+        const { error } = await (supabase as any).from("inventory_products").insert(data);
         if (error) throw error;
-        toast({ title: "Success", description: "Product added." });
+        toast({ title: "Product added ✅" });
       }
       resetForm(); fetchProducts(); fetchLowStockProducts();
     } catch { toast({ title: "Error", description: "Failed to save product.", variant: "destructive" }); }
@@ -229,37 +365,86 @@ const Inventory = () => {
     try {
       const { error } = await supabase.from("inventory_products").delete().eq("id", id);
       if (error) throw error;
-      toast({ title: "Success", description: "Product deleted." });
+      toast({ title: "Product deleted" });
       fetchProducts(); fetchLowStockProducts();
     } catch { toast({ title: "Error", description: "Failed to delete.", variant: "destructive" }); }
   };
 
   const resetForm = () => {
-    setFormData({ name: "", description: "", sku: "", unit_price: 0, cost_price: 0, current_stock: 0, min_stock_level: 0, max_stock_level: 0, unit: "piece", category: "", barcode: "", hsn_code: "", variants: [defaultVariant()] });
-    setEditingProduct(null); setShowAddDialog(false);
+    setFormData({ name: "", description: "", sku: "", unit_price: 0, cost_price: 0, current_stock: 0, min_stock_level: 0, max_stock_level: 0, unit: "piece", category: "", barcode: "", hsn_code: "", photo_url: "", variants: [makeDefaultVariant()] });
+    setPhotoPreview(""); setEditingProduct(null); setShowAddDialog(false);
   };
 
   const handleEdit = (product: InventoryProduct) => {
-    setFormData({ name: product.name, description: product.description || "", sku: product.sku || "", unit_price: product.unit_price, cost_price: product.cost_price || 0, current_stock: product.current_stock, min_stock_level: product.min_stock_level, max_stock_level: product.max_stock_level || 0, unit: product.unit, category: product.category || "", barcode: product.barcode || "", hsn_code: (product as any).hsn_code || "", variants: parseVariants(product) });
+    const variants = parseVariants(product);
+    setFormData({
+      name: product.name, description: product.description || "", sku: product.sku || "",
+      unit_price: product.unit_price, cost_price: product.cost_price || 0,
+      current_stock: product.current_stock, min_stock_level: product.min_stock_level,
+      max_stock_level: product.max_stock_level || 0, unit: product.unit,
+      category: product.category || "", barcode: product.barcode || "",
+      hsn_code: (product as any).hsn_code || "", photo_url: product.photo_url || "",
+      variants: variants.length > 0 ? variants : [makeDefaultVariant()],
+    });
+    setPhotoPreview(product.photo_url || "");
     setEditingProduct(product); setShowAddDialog(true);
   };
 
-  const addVariant = () => setFormData((p) => ({ ...p, variants: [...p.variants, defaultVariant()] }));
-  const updateVariant = (id: string, updates: Partial<VariantRow>) => setFormData((p) => ({ ...p, variants: p.variants.map((v) => (v.id === id ? { ...v, ...updates } : v)) }));
-  const removeVariant = (id: string) => setFormData((p) => { if (p.variants.length === 1) return p; return { ...p, variants: p.variants.filter((v) => v.id !== id) }; });
+  const addVariant = () => setFormData((p) => ({ ...p, variants: [...p.variants, makeDefaultVariant()] }));
+  const updateVariant = (id: string, updates: Partial<VariantRow>) =>
+    setFormData((p) => ({ ...p, variants: p.variants.map((v) => v.id === id ? { ...v, ...updates } : v) }));
+  const removeVariant = (id: string) =>
+    setFormData((p) => p.variants.length === 1 ? p : { ...p, variants: p.variants.filter((v) => v.id !== id) });
 
   const getStockStatus = (product: InventoryProduct) => {
-    const total = parseVariants(product).reduce((s, v) => s + (v.stock_quantity || 0), 0);
+    const total = parseVariants(product).reduce((s, v) => s + (v.stock_quantity || 0), 0) || product.current_stock;
     if (total === 0) return { status: "Out of Stock", variant: "destructive" as const };
     if (total <= product.min_stock_level) return { status: "Low Stock", variant: "secondary" as const };
     return { status: "In Stock", variant: "default" as const };
   };
 
-  const handleDownloadSample = () => {
-    downloadCSV("inventory_sample.csv", [CSV_HEADERS, ...CSV_SAMPLES]);
-    toast({ title: "Downloaded", description: "inventory_sample.csv saved. Fill it in and import." });
+  // ── Render variant field ───────────────────────────────
+  const renderVariantField = (field: VariantField, variant: VariantRow) => {
+    if (field.type === "select" && field.options) {
+      return (
+        <Select value={variant[field.key] ?? ""} onValueChange={(v) => updateVariant(variant.id, { [field.key]: v })}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={`Select ${field.label}`} /></SelectTrigger>
+          <SelectContent>{field.options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+        </Select>
+      );
+    }
+    return (
+      <Input
+        type={field.type === "number" ? "number" : "text"}
+        className="h-8 text-sm"
+        placeholder={field.placeholder}
+        value={variant[field.key] ?? ""}
+        onChange={(e) => updateVariant(variant.id, { [field.key]: field.type === "number" ? parseFloat(e.target.value) || 0 : e.target.value })}
+      />
+    );
   };
 
+  // ── CSV: Download sample with dynamic headers ──────────
+  const handleDownloadSample = () => {
+    const baseHeaders = ["product_name", "description", "category", "unit"];
+    const variantHeaders = effectiveConfig.variantFields.map((f) => f.key);
+    const stockHeaders = ["stock_quantity", "unit_price", "cost_price", "hsn_code", "min_stock_level"];
+    const headers = [...baseHeaders, ...variantHeaders, ...stockHeaders];
+    const sampleDefaults: Record<string, string> = {
+      product_name: "Sample Product", description: "Product description",
+      category: businessType, unit: "piece", stock_quantity: "10",
+      unit_price: "499", cost_price: "250", hsn_code: "6109", min_stock_level: "5",
+    };
+    effectiveConfig.variantFields.forEach((f) => {
+      const defaultVal = effectiveConfig.defaultVariant[f.key];
+      sampleDefaults[f.key] = defaultVal !== undefined && defaultVal !== "" ? String(defaultVal) : f.options?.[0] ?? `sample_${f.key}`;
+    });
+    const sampleRow = headers.map((h) => sampleDefaults[h] ?? "");
+    downloadCSV("inventory_sample.csv", [headers, sampleRow]);
+    toast({ title: "Downloaded", description: "inventory_sample.csv saved with your variant fields." });
+  };
+
+  // ── CSV: Parse file ────────────────────────────────────
   const handleCSVFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     setCSVFileName(file.name);
@@ -271,29 +456,57 @@ const Inventory = () => {
       const headers = allRows[0].map((h) => h.toLowerCase().trim());
       const get = (row: string[], name: string) => { const i = headers.indexOf(name); return i >= 0 ? (row[i] || "").trim() : ""; };
       const preview: CSVPreviewRow[] = allRows.slice(1).map((row, i) => {
-        const obj: CSVPreviewRow = { rowIndex: i + 2, product_name: get(row, "product_name"), description: get(row, "description"), category: get(row, "category"), unit: get(row, "unit") || "piece", size: get(row, "size"), color: get(row, "color"), brand: get(row, "brand") || "Unbranded", stock_quantity: parseInt(get(row, "stock_quantity")) || 0, unit_price: parseFloat(get(row, "unit_price")) || 0, cost_price: parseFloat(get(row, "cost_price")) || 0, hsn_code: get(row, "hsn_code"), min_stock_level: parseInt(get(row, "min_stock_level")) || 0, errors: [], valid: true };
-        obj.errors = validateCSVRow(obj); obj.valid = obj.errors.length === 0; return obj;
+        const variantData: Record<string, any> = {};
+        effectiveConfig.variantFields.forEach((f) => {
+          const val = get(row, f.key);
+          variantData[f.key] = f.type === "number" ? parseFloat(val) || 0 : val;
+        });
+        const obj: CSVPreviewRow = {
+          rowIndex: i + 2, product_name: get(row, "product_name"), description: get(row, "description"),
+          category: get(row, "category"), unit: get(row, "unit") || "piece",
+          stock_quantity: parseInt(get(row, "stock_quantity")) || 0,
+          unit_price: parseFloat(get(row, "unit_price")) || 0,
+          cost_price: parseFloat(get(row, "cost_price")) || 0,
+          hsn_code: get(row, "hsn_code"), min_stock_level: parseInt(get(row, "min_stock_level")) || 0,
+          ...variantData, errors: [], valid: true,
+        };
+        const errors: string[] = [];
+        if (!obj.product_name) errors.push("Product name required");
+        if (isNaN(obj.unit_price) || obj.unit_price < 0) errors.push("Invalid unit price");
+        obj.errors = errors; obj.valid = errors.length === 0; return obj;
       });
       setCSVPreviewRows(preview); setShowCSVDialog(true);
     };
     reader.readAsText(file); e.target.value = "";
   };
 
+  // ── CSV: Import ────────────────────────────────────────
   const handleCSVImport = async () => {
     if (!ownerId) return;
     const valid = csvPreviewRows.filter((r) => r.valid);
     if (!valid.length) { toast({ title: "No valid rows", variant: "destructive" }); return; }
     setCSVImporting(true);
-    const map = new Map<string, CSVPreviewRow[]>();
-    for (const r of valid) { const k = r.product_name.trim().toLowerCase(); if (!map.has(k)) map.set(k, []); map.get(k)!.push(r); }
     let ok = 0, fail = 0;
-    for (const [, rows] of map.entries()) {
-      const first = rows[0];
-      const variants: VariantRow[] = rows.map((r) => ({ id: Date.now().toString() + Math.random(), size: r.size, color: r.color, brand: r.brand, stock_quantity: r.stock_quantity, unit_price: r.unit_price, cost_price: r.cost_price, hsn_code: r.hsn_code, min_stock_level: r.min_stock_level }));
-      const { error } = await supabase.from("inventory_products").insert({ name: first.product_name, description: first.description || null, sku: null, unit_price: variants[0].unit_price, cost_price: variants[0].cost_price || null, current_stock: variants.reduce((s, v) => s + v.stock_quantity, 0), min_stock_level: Math.min(...variants.map((v) => v.min_stock_level)), max_stock_level: null, unit: first.unit, category: first.category || null, barcode: null, hsn_code: first.hsn_code || null, variants: JSON.stringify(variants), user_id: ownerId });
+    for (const row of valid) {
+      const variantFieldValues: Record<string, any> = {};
+      effectiveConfig.variantFields.forEach((f) => {
+        variantFieldValues[f.key] = row[f.key] ?? effectiveConfig.defaultVariant[f.key] ?? "";
+      });
+      const variant = {
+        id: Date.now().toString() + Math.random(), stock_quantity: row.stock_quantity,
+        unit_price: row.unit_price, cost_price: row.cost_price, hsn_code: row.hsn_code,
+        min_stock_level: row.min_stock_level, ...variantFieldValues,
+      };
+      const { error } = await (supabase as any).from("inventory_products").insert({
+        name: row.product_name, description: row.description || null, sku: null,
+        unit_price: row.unit_price, cost_price: row.cost_price || null,
+        current_stock: row.stock_quantity, min_stock_level: row.min_stock_level,
+        max_stock_level: null, unit: row.unit, category: row.category || null,
+        barcode: null, hsn_code: row.hsn_code || null, variants: JSON.stringify([variant]), user_id: ownerId,
+      });
       if (error) { fail++; } else { ok++; }
     }
-    toast({ title: "Import complete", description: `${ok} product(s) imported${fail ? `, ${fail} failed` : ""}.`, variant: fail ? "destructive" : "default" });
+    toast({ title: "Import complete", description: `${ok} imported${fail ? `, ${fail} failed` : ""}.`, variant: fail ? "destructive" : "default" });
     setShowCSVDialog(false); setCSVPreviewRows([]); setCSVFileName(""); fetchProducts(); fetchLowStockProducts();
     setCSVImporting(false);
   };
@@ -302,25 +515,85 @@ const Inventory = () => {
   const invalidCount = csvPreviewRows.filter((r) => !r.valid).length;
   const categories = [...new Set(products.map((p) => p.category).filter(Boolean))];
 
+  // ── Render ─────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-yellow-50">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
 
-        {/* ✅ FIXED: Banner is now inside the container div */}
         {activeCompany && !activeCompany.isOwn && (
           <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
             <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
-            <p className="text-sm font-semibold text-blue-800">
-              Viewing: {activeCompany.companyName} — Role: {activeCompany.role}
-            </p>
+            <p className="text-sm font-semibold text-blue-800">Viewing: {activeCompany.companyName} — Role: {activeCompany.role}</p>
           </div>
         )}
 
+        {/* ── Public Store Link Banner ── */}
+        {user && publicStoreUrl && (
+          <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200 rounded-xl px-4 py-3.5 shadow-sm">
+            <div className="flex items-center gap-2.5 shrink-0">
+              <div className="w-9 h-9 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center">
+                <Store className="w-4.5 h-4.5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Your Public Store</p>
+                <p className="text-[11px] text-indigo-400">Customers can browse your live inventory at this link</p>
+              </div>
+            </div>
+
+            {/* URL pill */}
+            <div className="flex-1 flex items-center gap-2 bg-white border border-indigo-200 rounded-lg px-3 py-1.5 min-w-0">
+              <Link className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span className="text-xs text-gray-600 font-mono truncate flex-1">{publicStoreUrl}</span>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCopyStoreLink}
+                className={`h-8 text-xs border-indigo-300 transition-all ${
+                  linkCopied
+                    ? "bg-green-50 border-green-300 text-green-700"
+                    : "text-indigo-700 hover:bg-indigo-50"
+                }`}
+              >
+                {linkCopied ? (
+                  <><CheckCircle className="w-3.5 h-3.5 mr-1.5" />Copied!</>
+                ) : (
+                  <><Copy className="w-3.5 h-3.5 mr-1.5" />Copy Link</>
+                )}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleOpenStore}
+                className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />Preview Store
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
         <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-yellow-600 bg-clip-text text-transparent">Inventory Management</h1>
-            <p className="text-muted-foreground">Manage your products and stock levels</p>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-yellow-600 bg-clip-text text-transparent">
+              Inventory Management
+            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-muted-foreground text-sm">Business type:</span>
+              <button
+                onClick={() => setShowTypeSelector(true)}
+                className="flex items-center gap-1.5 text-sm font-medium text-green-700 hover:text-green-900 bg-green-50 hover:bg-green-100 border border-green-200 rounded-full px-3 py-0.5 transition-colors"
+              >
+                <span>{config.icon}</span>
+                <span>{config.label}</span>
+                {customFields.length > 0 && <span className="bg-green-600 text-white text-xs rounded-full px-1.5">+{customFields.length}</span>}
+                <Settings2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" onClick={handleDownloadSample} className="border-blue-300 text-blue-700 hover:bg-blue-50">
@@ -336,16 +609,22 @@ const Inventory = () => {
           </div>
         </div>
 
+        {/* Low stock alert */}
         {lowStockProducts.length > 0 && (
           <Card className="mb-6 border-yellow-200 bg-yellow-50">
-            <CardHeader className="pb-3"><CardTitle className="flex items-center text-yellow-800"><AlertTriangle className="w-5 h-5 mr-2" />Low Stock Alert</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center text-yellow-800"><AlertTriangle className="w-5 h-5 mr-2" />Low Stock Alert</CardTitle>
+            </CardHeader>
             <CardContent>
               <p className="text-yellow-700 mb-2">{lowStockProducts.length} product(s) running low:</p>
-              <div className="flex flex-wrap gap-2">{lowStockProducts.map((p) => <Badge key={p.id} variant="secondary">{p.name} ({p.current_stock}/{p.min_stock_level})</Badge>)}</div>
+              <div className="flex flex-wrap gap-2">
+                {lowStockProducts.map((p) => <Badge key={p.id} variant="secondary">{p.name} ({p.current_stock}/{p.min_stock_level})</Badge>)}
+              </div>
             </CardContent>
           </Card>
         )}
 
+        {/* Filters */}
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -378,25 +657,48 @@ const Inventory = () => {
                 </Select>
               </div>
               <div className="flex items-end">
-                <Button variant="outline" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setStockFilter("all"); }}>Clear Filters</Button>
+                <Button variant="outline" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setStockFilter("all"); }}>
+                  Clear Filters
+                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Products table */}
         <Card>
-          <CardHeader><CardTitle className="flex items-center"><Package className="w-5 h-5 mr-2" />Products ({filteredProducts.length})</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center"><Package className="w-5 h-5 mr-2" />Products ({filteredProducts.length})</span>
+              {/* Compact store link shortcut in table header */}
+              {user && (
+                <button
+                  onClick={handleCopyStoreLink}
+                  className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-full px-3 py-1 transition-colors"
+                >
+                  <Store className="w-3.5 h-3.5" />
+                  Share Store Link
+                </button>
+              )}
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            {isLoading ? <div className="text-center py-8">Loading…</div> : filteredProducts.length === 0 ? (
+            {isLoading ? (
+              <div className="text-center py-8">Loading…</div>
+            ) : filteredProducts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">No products found.</div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead><TableHead>Category</TableHead>
-                      <TableHead>Variants & Stock</TableHead><TableHead>Unit Price</TableHead>
-                      <TableHead>Status</TableHead><TableHead>Actions</TableHead>
+                      <TableHead>Photo</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Variants & Stock</TableHead>
+                      <TableHead>Unit Price</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -406,19 +708,37 @@ const Inventory = () => {
                       return (
                         <TableRow key={product.id}>
                           <TableCell>
+                            {product.photo_url ? (
+                              <img src={product.photo_url} alt={product.name} className="w-12 h-12 object-cover rounded-lg border border-gray-200" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-lg border border-dashed border-gray-200 flex items-center justify-center bg-gray-50">
+                                <Image className="w-5 h-5 text-gray-300" />
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             <div className="font-medium">{product.name}</div>
-                            {product.description && <div className="text-sm text-muted-foreground">{product.description}</div>}
+                            {product.description && <div className="text-sm text-muted-foreground truncate max-w-[180px]">{product.description}</div>}
                           </TableCell>
                           <TableCell>{product.category || "-"}</TableCell>
                           <TableCell>
                             <div className="text-sm space-y-1">
-                              {pv.length > 0 ? pv.map((v) => <Badge key={v.id} variant={v.stock_quantity === 0 ? "destructive" : "default"}>{v.size} {v.color}: {v.stock_quantity}</Badge>) : <div>{product.current_stock} {product.unit}</div>}
+                              {pv.length > 0 ? pv.map((v) => (
+                                <Badge key={v.id} variant={v.stock_quantity === 0 ? "destructive" : "default"}>
+                                  {getVariantLabel(v)}: {v.stock_quantity}
+                                </Badge>
+                              )) : <div>{product.current_stock} {product.unit}</div>}
                               <div className="text-xs text-muted-foreground">Min: {product.min_stock_level}</div>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm space-y-1">
-                              {pv.map((v) => <div key={v.id} className="flex justify-between gap-2"><span>{v.size}/{v.color}</span><span>₹{v.unit_price?.toFixed(2)}</span></div>)}
+                              {pv.map((v) => (
+                                <div key={v.id} className="flex justify-between gap-2">
+                                  <span className="text-muted-foreground truncate max-w-[80px]">{getVariantLabel(v)}</span>
+                                  <span>₹{v.unit_price?.toFixed(2)}</span>
+                                </div>
+                              ))}
                             </div>
                           </TableCell>
                           <TableCell><Badge variant={ss.variant}>{ss.status}</Badge></TableCell>
@@ -439,42 +759,184 @@ const Inventory = () => {
           </CardContent>
         </Card>
 
-        {/* View dialog */}
+        {/* ── Business Type Selector Dialog ── */}
+        <Dialog open={showTypeSelector} onOpenChange={(o) => { setShowTypeSelector(o); if (!o) setShowCustomEditor(false); }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Settings2 className="w-5 h-5" />Inventory Settings</DialogTitle>
+              <DialogDescription>Choose your business type and customize variant fields.</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(BUSINESS_TYPES).map(([key, cfg]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setBusinessType(key);
+                    localStorage.setItem(`inventory_business_type_${ownerId}`, key);
+                    setCustomFields([]);
+                    localStorage.removeItem(`inventory_custom_fields_${ownerId}`);
+                    toast({ title: `Switched to ${cfg.label}` });
+                  }}
+                  className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                    businessType === key
+                      ? "border-green-500 bg-green-50 shadow-sm"
+                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="text-2xl">{cfg.icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm text-gray-800">{cfg.label}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">{cfg.variantFields.map((f) => f.label).join(", ")}</p>
+                  </div>
+                  {businessType === key && <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 my-1">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400 uppercase tracking-wide">Customize Fields</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-700">Fields for {config.icon} {config.label}</p>
+                <Button size="sm" variant="outline" onClick={() => setShowCustomEditor(true)} className="text-green-700 border-green-300 hover:bg-green-50">
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Field
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                {config.variantFields.map((field) => (
+                  <div key={field.key} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${field.type === "select" ? "bg-blue-100 text-blue-700" : field.type === "number" ? "bg-purple-100 text-purple-700" : "bg-gray-200 text-gray-600"}`}>{field.type}</span>
+                      <span className="text-sm font-medium text-gray-800">{field.label}</span>
+                      {field.options && <span className="text-xs text-gray-400">({field.options.slice(0, 3).join(", ")}{field.options.length > 3 ? "…" : ""})</span>}
+                    </div>
+                    <span className="text-xs text-gray-400 italic">built-in</span>
+                  </div>
+                ))}
+                {customFields.map((field, idx) => (
+                  <div key={field.key} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${field.type === "select" ? "bg-blue-100 text-blue-700" : field.type === "number" ? "bg-purple-100 text-purple-700" : "bg-gray-200 text-gray-600"}`}>{field.type}</span>
+                      <span className="text-sm font-medium text-gray-800">{field.label}</span>
+                      {field.options && <span className="text-xs text-gray-400">({field.options.slice(0, 3).join(", ")}{field.options.length > 3 ? "…" : ""})</span>}
+                      <span className="text-xs bg-green-200 text-green-700 rounded px-1.5 py-0.5">custom</span>
+                    </div>
+                    <button onClick={() => { const updated = customFields.filter((_, i) => i !== idx); saveCustomFields(updated); toast({ title: `"${field.label}" removed` }); }} className="text-red-400 hover:text-red-600 transition-colors p-1 ml-2 shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {customFields.length === 0 && <p className="text-xs text-gray-400 text-center py-2 italic">No custom fields yet. Click "Add Field" to add one.</p>}
+              </div>
+              {showCustomEditor && (
+                <div className="border-2 border-green-200 rounded-xl p-4 bg-green-50 space-y-3 mt-2">
+                  <p className="text-sm font-semibold text-green-800">New Custom Field</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs mb-1 block">Field Label *</Label>
+                      <Input placeholder="e.g. Material, Warranty, SKU" value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} className="h-8 text-sm" />
+                    </div>
+                    <div>
+                      <Label className="text-xs mb-1 block">Field Type</Label>
+                      <Select value={newFieldType} onValueChange={(v: FieldType) => setNewFieldType(v)}>
+                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">Text (free input)</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="select">Dropdown (options)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {newFieldType === "select" && (
+                    <div>
+                      <Label className="text-xs mb-1 block">Dropdown Options <span className="text-gray-400">(comma separated)</span></Label>
+                      <Input placeholder="e.g. Small, Medium, Large, XL" value={newFieldOptions} onChange={(e) => setNewFieldOptions(e.target.value)} className="h-8 text-sm" />
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => {
+                        if (!newFieldLabel.trim()) { toast({ title: "Label required", variant: "destructive" }); return; }
+                        if (newFieldType === "select" && !newFieldOptions.trim()) { toast({ title: "Add at least one option", variant: "destructive" }); return; }
+                        const key = `custom_${newFieldLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")}_${Date.now()}`;
+                        const newField: VariantField = {
+                          key, label: newFieldLabel.trim(), type: newFieldType,
+                          ...(newFieldType === "select" ? { options: newFieldOptions.split(",").map((o) => o.trim()).filter(Boolean) } : {}),
+                          placeholder: `Enter ${newFieldLabel.trim().toLowerCase()}`,
+                        };
+                        saveCustomFields([...customFields, newField]);
+                        setNewFieldLabel(""); setNewFieldOptions(""); setNewFieldType("text");
+                        setShowCustomEditor(false);
+                        toast({ title: `"${newField.label}" field added ✅` });
+                      }}
+                    >Add Field</Button>
+                    <Button size="sm" variant="outline" onClick={() => { setShowCustomEditor(false); setNewFieldLabel(""); setNewFieldOptions(""); setNewFieldType("text"); }}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 text-center">Custom fields are saved per account. Switching business type clears custom fields.</p>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── View Product Dialog ── */}
         <Dialog open={!!viewProduct} onOpenChange={() => setViewProduct(null)}>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>{viewProduct?.name}</DialogTitle></DialogHeader>
+            {viewProduct?.photo_url && (
+              <img src={viewProduct.photo_url} alt={viewProduct.name} className="w-full h-48 object-cover rounded-lg border border-gray-200" />
+            )}
             <div className="space-y-3">
               {viewProduct && parseVariants(viewProduct).map((v) => (
                 <div key={v.id} className="border p-3 rounded-md flex justify-between">
-                  <div><div className="font-medium">{v.size} / {v.color} / {v.brand}</div><div className="text-sm text-muted-foreground">HSN: {v.hsn_code}</div></div>
-                  <div className="text-right"><div>₹{v.unit_price}</div><div className="text-xs">Stock: {v.stock_quantity}</div></div>
+                  <div>
+                    <div className="font-medium">{getVariantLabel(v)}</div>
+                    {effectiveConfig.variantFields.map((f) => v[f.key] ? (
+                      <div key={f.key} className="text-sm text-muted-foreground">{f.label}: {v[f.key]}</div>
+                    ) : null)}
+                    <div className="text-sm text-muted-foreground">HSN: {v.hsn_code || "—"}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold">₹{v.unit_price}</div>
+                    <div className="text-xs text-muted-foreground">Stock: {v.stock_quantity}</div>
+                    <div className="text-xs text-muted-foreground">Cost: ₹{v.cost_price}</div>
+                  </div>
                 </div>
               ))}
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* CSV preview dialog */}
+        {/* ── CSV Preview Dialog ── */}
         <Dialog open={showCSVDialog} onOpenChange={(o) => { if (!o) { setShowCSVDialog(false); setCSVPreviewRows([]); setCSVFileName(""); } }}>
           <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" />CSV Import Preview</DialogTitle>
-              <DialogDescription>Review rows before importing. Rows with errors will be skipped.</DialogDescription>
+              <DialogDescription>
+                Review rows before importing. Variant columns detected for: {config.icon} {config.label}
+                {customFields.length > 0 && ` + ${customFields.length} custom field(s)`}
+              </DialogDescription>
             </DialogHeader>
             <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/40 text-sm flex-wrap">
               <span className="text-muted-foreground font-medium">{csvFileName}</span>
               <span className="flex items-center gap-1 text-green-600"><CheckCircle className="w-4 h-4" />{validCount} valid</span>
               {invalidCount > 0 && <span className="flex items-center gap-1 text-red-600"><XCircle className="w-4 h-4" />{invalidCount} errors</span>}
-              <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={handleDownloadSample}><Download className="w-3 h-3 mr-1" />Re-download Sample</Button>
             </div>
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>#</TableHead><TableHead>Product</TableHead><TableHead>Category</TableHead>
-                    <TableHead>Size</TableHead><TableHead>Color</TableHead><TableHead>Brand</TableHead>
-                    <TableHead>Stock</TableHead><TableHead>Unit ₹</TableHead><TableHead>Cost ₹</TableHead>
-                    <TableHead>HSN</TableHead><TableHead>Status</TableHead>
+                    <TableHead>#</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Category</TableHead>
+                    {effectiveConfig.variantFields.map((f) => <TableHead key={f.key} className="text-xs">{f.label}</TableHead>)}
+                    <TableHead>Stock</TableHead>
+                    <TableHead>Unit ₹</TableHead>
+                    <TableHead>HSN</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -483,12 +945,9 @@ const Inventory = () => {
                       <TableCell className="text-xs text-muted-foreground">{row.rowIndex}</TableCell>
                       <TableCell><div className="font-medium text-sm">{row.product_name || <span className="text-red-500 italic">missing</span>}</div></TableCell>
                       <TableCell className="text-sm">{row.category || "-"}</TableCell>
-                      <TableCell className="text-sm">{row.size || <span className="text-red-500 italic">!</span>}</TableCell>
-                      <TableCell className="text-sm">{row.color || <span className="text-red-500 italic">!</span>}</TableCell>
-                      <TableCell className="text-sm">{row.brand}</TableCell>
+                      {effectiveConfig.variantFields.map((f) => <TableCell key={f.key} className="text-sm">{row[f.key] || "-"}</TableCell>)}
                       <TableCell className="text-sm">{row.stock_quantity}</TableCell>
                       <TableCell className="text-sm">₹{row.unit_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-sm">₹{row.cost_price.toFixed(2)}</TableCell>
                       <TableCell className="text-sm">{row.hsn_code || "-"}</TableCell>
                       <TableCell>
                         {row.valid
@@ -500,9 +959,7 @@ const Inventory = () => {
                 </TableBody>
               </Table>
             </div>
-            {invalidCount > 0 && <p className="text-sm text-muted-foreground">⚠️ {invalidCount} row(s) will be skipped. {validCount} will be imported.</p>}
             <DialogFooter className="gap-2 flex-wrap">
-              <Button variant="outline" onClick={handleDownloadSample}><Download className="w-4 h-4 mr-2" />Download Sample</Button>
               <Button variant="outline" onClick={() => csvInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" />Choose Another File</Button>
               <Button disabled={csvImporting || validCount === 0} onClick={handleCSVImport} className="bg-gradient-to-r from-green-600 to-yellow-600 hover:from-green-700 hover:to-yellow-700">
                 {csvImporting ? "Importing…" : `Import ${validCount} Product(s)`}
@@ -511,34 +968,61 @@ const Inventory = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Add/Edit dialog */}
+        {/* ── Add / Edit Dialog ── */}
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingProduct ? "Edit Product" : "Add New Product"}</DialogTitle>
-              <DialogDescription>{editingProduct ? "Update product information" : "Add a new product to your inventory"}</DialogDescription>
+              <DialogDescription>
+                {config.icon} {config.label}
+                {customFields.length > 0 && ` + ${customFields.length} custom field${customFields.length > 1 ? "s" : ""}`}
+                {" — "}variant fields: {effectiveConfig.variantFields.map((f) => f.label).join(", ")}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Photo */}
+              <div className="md:col-span-2">
+                <Label className="mb-2 block">Product Photo</Label>
+                <div className="flex items-center gap-4">
+                  {photoPreview ? (
+                    <div className="relative">
+                      <img src={photoPreview} alt="Product" className="w-24 h-24 object-cover rounded-xl border border-gray-200 shadow-sm" />
+                      <button type="button" onClick={() => { setPhotoPreview(""); setFormData((p) => ({ ...p, photo_url: "" })); }} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600">
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center bg-gray-50 cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors" onClick={() => photoInputRef.current?.click()}>
+                      <Camera className="w-6 h-6 text-gray-400" />
+                      <span className="text-xs text-gray-400 mt-1">Add Photo</span>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto}>
+                      <Upload className="w-4 h-4 mr-2" />
+                      {uploadingPhoto ? "Uploading..." : photoPreview ? "Change Photo" : "Upload Photo"}
+                    </Button>
+                    <p className="text-xs text-gray-400">JPG, PNG up to 5MB</p>
+                  </div>
+                  <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ""; }} />
+                </div>
+              </div>
+              {/* Basic info */}
               <div>
                 <Label>Product Name *</Label>
                 <Input value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} placeholder="Enter product name" />
               </div>
+              <div>
+                <Label>SKU / Code</Label>
+                <Input value={formData.sku} onChange={(e) => setFormData((p) => ({ ...p, sku: e.target.value }))} placeholder="Optional" />
+              </div>
               <div className="md:col-span-2">
                 <Label>Description</Label>
-                <Textarea value={formData.description} onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))} />
+                <Textarea value={formData.description} onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))} rows={2} />
               </div>
               <div>
                 <Label>Category</Label>
-                <Select value={formData.category} onValueChange={(v) => setFormData((p) => ({ ...p, category: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="electronics">Electronics</SelectItem>
-                    <SelectItem value="clothing">Clothing</SelectItem>
-                    <SelectItem value="grocery">Grocery</SelectItem>
-                    <SelectItem value="medical">Medical</SelectItem>
-                    <SelectItem value="stationery">Stationery</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input value={formData.category} onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))} placeholder="e.g. Electronics, Clothing" />
               </div>
               <div>
                 <Label>Unit</Label>
@@ -550,63 +1034,69 @@ const Inventory = () => {
                     <SelectItem value="liter">Liter</SelectItem>
                     <SelectItem value="meter">Meter</SelectItem>
                     <SelectItem value="box">Box</SelectItem>
+                    <SelectItem value="set">Set</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {/* Variants */}
               <div className="md:col-span-2 space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-base font-semibold">Variants</Label>
-                  <span className="text-xs text-muted-foreground">Size · Color · Brand · Stock</span>
+                  <span className="text-xs text-muted-foreground bg-gray-100 rounded-full px-2 py-0.5">
+                    {config.icon} {effectiveConfig.variantFields.map((f) => f.label).join(" · ")}
+                  </span>
                 </div>
                 {formData.variants.map((variant, index) => (
-                  <div key={variant.id} className="border rounded-md p-3 bg-muted/20 space-y-2">
+                  <div key={variant.id} className="border rounded-xl p-4 bg-muted/20 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-muted-foreground">Variant #{index + 1}</span>
                       <Button variant="ghost" size="sm" className="text-red-500 h-6 px-2 text-xs" onClick={() => removeVariant(variant.id)}>Remove</Button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div><Label className="text-xs mb-1 block">Size</Label>
-                        <Select value={variant.size} onValueChange={(v) => updateVariant(variant.id, { size: v })}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>{SIZES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                        </Select>
+                    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(effectiveConfig.variantFields.length, 3)}, 1fr)` }}>
+                      {effectiveConfig.variantFields.map((field) => (
+                        <div key={field.key}>
+                          <Label className="text-xs mb-1 block">
+                            {field.label}
+                            {customFields.some((cf) => cf.key === field.key) && <span className="ml-1 text-xs text-green-600">(custom)</span>}
+                          </Label>
+                          {renderVariantField(field, variant)}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-gray-100">
+                      <div>
+                        <Label className="text-xs mb-1 block">Unit Price (₹) *</Label>
+                        <Input type="number" step="0.01" className="h-8 text-sm" value={variant.unit_price} onChange={(e) => updateVariant(variant.id, { unit_price: parseFloat(e.target.value) || 0 })} />
                       </div>
-                      <div><Label className="text-xs mb-1 block">Color</Label>
-                        <Select value={variant.color} onValueChange={(v) => updateVariant(variant.id, { color: v })}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>{COLORS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                        </Select>
+                      <div>
+                        <Label className="text-xs mb-1 block">Cost Price (₹)</Label>
+                        <Input type="number" step="0.01" className="h-8 text-sm" value={variant.cost_price} onChange={(e) => updateVariant(variant.id, { cost_price: parseFloat(e.target.value) || 0 })} />
                       </div>
-                      <div><Label className="text-xs">Unit Price (₹) *</Label>
-                        <Input type="number" step="0.01" value={variant.unit_price} onChange={(e) => updateVariant(variant.id, { unit_price: parseFloat(e.target.value) || 0 })} />
-                      </div>
-                      <div><Label className="text-xs">Min Stock</Label>
-                        <Input type="number" value={variant.min_stock_level} onChange={(e) => updateVariant(variant.id, { min_stock_level: parseInt(e.target.value) || 0 })} />
-                      </div>
-                      <div><Label className="text-xs">HSN Code</Label>
-                        <Input value={variant.hsn_code} onChange={(e) => updateVariant(variant.id, { hsn_code: e.target.value })} placeholder="HSN" />
-                      </div>
-                      <div><Label className="text-xs">Cost Price (₹)</Label>
-                        <Input type="number" step="0.01" value={variant.cost_price} onChange={(e) => updateVariant(variant.id, { cost_price: parseFloat(e.target.value) || 0 })} />
-                      </div>
-                      <div><Label className="text-xs mb-1 block">Brand</Label>
-                        <Select value={variant.brand} onValueChange={(v) => updateVariant(variant.id, { brand: v })}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>{BRANDS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                      <div><Label className="text-xs mb-1 block">Stock Quantity</Label>
+                      <div>
+                        <Label className="text-xs mb-1 block">Stock Qty</Label>
                         <Input type="number" min={0} className="h-8 text-sm" value={variant.stock_quantity} onChange={(e) => updateVariant(variant.id, { stock_quantity: parseInt(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label className="text-xs mb-1 block">Min Stock</Label>
+                        <Input type="number" className="h-8 text-sm" value={variant.min_stock_level} onChange={(e) => updateVariant(variant.id, { min_stock_level: parseInt(e.target.value) || 0 })} />
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs mb-1 block">HSN Code</Label>
+                        <Input className="h-8 text-sm" placeholder="e.g. 6109" value={variant.hsn_code} onChange={(e) => updateVariant(variant.id, { hsn_code: e.target.value })} />
                       </div>
                     </div>
                   </div>
                 ))}
-                <Button variant="outline" type="button" className="w-full" onClick={addVariant}>+ Add Variant</Button>
+                <Button variant="outline" type="button" className="w-full" onClick={addVariant}>
+                  <Plus className="w-4 h-4 mr-2" /> Add Variant
+                </Button>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={resetForm}>Cancel</Button>
-              <Button onClick={handleSaveProduct}>{editingProduct ? "Update Product" : "Add Product"}</Button>
+              <Button onClick={handleSaveProduct} disabled={!formData.name.trim() || uploadingPhoto}>
+                {editingProduct ? "Update Product" : "Add Product"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

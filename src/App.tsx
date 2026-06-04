@@ -5,11 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { CompanyProvider } from "@/hooks/useCompany";
-
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Layout from "@/Layout";
 import RoleGuard from "@/components/RoleGuard";
-
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Invoices from "./pages/Invoices";
@@ -21,6 +19,7 @@ import Inventory from "./pages/Inventory";
 import Cashbook from "./pages/Cashbook";
 import PurchaseInvoices from "./pages/PurchaseInvoices";
 import TeamSettings from "./pages/TeamSettings";
+import PublicStore from "./pages/PublicStore";
 
 const queryClient = new QueryClient();
 
@@ -33,10 +32,14 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              {/* Auth — no layout */}
+
+              {/* ── Fully public — no auth, no Layout wrapper ── */}
+              <Route path="/store/:userId" element={<PublicStore />} />
+
+              {/* ── Auth — no layout ── */}
               <Route path="/auth" element={<Auth />} />
 
-              {/* All other routes through Layout */}
+              {/* ── All app routes through Layout ── */}
               <Route element={<Layout />}>
                 <Route path="/" element={<Index />} />
 
@@ -98,6 +101,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
               </Route>
+
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
