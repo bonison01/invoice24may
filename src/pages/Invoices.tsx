@@ -427,7 +427,7 @@ const Invoices = () => {
     try {
       const { data, error } = await (supabase as any)
         .from("inventory_products")
-        .select("id, name, description, sku, unit_price, hsn_code")
+        .select("id, name, description, sku, unit_price, current_stock, hsn_code")
         .eq("user_id", ownerId)
         .ilike("name", `%${query}%`)
         .limit(8);

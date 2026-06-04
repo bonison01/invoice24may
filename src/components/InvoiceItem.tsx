@@ -20,6 +20,7 @@ export interface InventorySearchResult {
   sku?: string;
   unit_price: number;
   hsn_code?: string;
+  current_stock?: number;
 }
 
 interface InvoiceItemProps {
@@ -36,24 +37,24 @@ const InvoiceItem = ({ item, onUpdate, onDelete, onInventorySearch }: InvoiceIte
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeout = useRef<NodeJS.Timeout>();
   const wrapperRef = useRef<HTMLDivElement>(null);
-const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
-const inputRef = useRef<HTMLInputElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+  const inputRef = useRef<HTMLInputElement>(null);
   // Close dropdown on outside click
   useEffect(() => {
-  const handleClickOutside = (e: MouseEvent) => {
-    if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-      setShowSuggestions(false);
-    }
-  };
-  const handleScroll = () => setShowSuggestions(false); // ← add this
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    const handleScroll = () => setShowSuggestions(false); // ← add this
 
-  document.addEventListener("mousedown", handleClickOutside);
-  window.addEventListener("scroll", handleScroll, true); // ← add this
-  return () => {
-    document.removeEventListener("mousedown", handleClickOutside);
-    window.removeEventListener("scroll", handleScroll, true); // ← add this
-  };
-}, []);
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScroll, true); // ← add this
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true); // ← add this
+    };
+  }, []);
 
   const compute = (patch: Partial<InvoiceItemType>) => {
     const merged = { ...item, ...patch };
@@ -79,41 +80,42 @@ const inputRef = useRef<HTMLInputElement>(null);
   };
 
   const handleDescriptionChange = async (value: string) => {
-  compute({ description: value });
+    compute({ description: value });
 
-  if (!onInventorySearch) return;
-  clearTimeout(searchTimeout.current);
+    if (!onInventorySearch) return;
+    clearTimeout(searchTimeout.current);
 
-  if (value.length < 2) {
-    setSuggestions([]);
-    setShowSuggestions(false);
-    return;
-  }
+    if (value.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
 
-  // Calculate position from input
-  if (inputRef.current) {
-  const rect = inputRef.current.getBoundingClientRect();
-  setDropdownPos({
-    top: rect.bottom + 4,       // ← remove window.scrollY
-    left: rect.left,            // ← remove window.scrollX
-    width: rect.width,
-  });
-}
+    // Calculate position from input
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 4,       // ← remove window.scrollY
+        left: rect.left,            // ← remove window.scrollX
+        width: rect.width,
+      });
+    }
 
-  setIsSearching(true);
-  searchTimeout.current = setTimeout(async () => {
-    const results = await onInventorySearch(value);
-    setSuggestions(results);
-    setShowSuggestions(results.length > 0);
-    setIsSearching(false);
-  }, 300);
-};
+    setIsSearching(true);
+    searchTimeout.current = setTimeout(async () => {
+      const results = await onInventorySearch(value);
+      setSuggestions(results);
+      setShowSuggestions(results.length > 0);
+      setIsSearching(false);
+    }, 300);
+  };
 
   const handleSelectSuggestion = (product: InventorySearchResult) => {
     compute({
       description: product.name,
       unitPrice: product.unit_price,
       hsnCode: product.hsn_code ?? "",
+
       orderId: product.sku ?? "",
     });
     setSuggestions([]);
@@ -130,71 +132,110 @@ const inputRef = useRef<HTMLInputElement>(null);
 
         {/* Item Name with autocomplete */}
         {/* Item Name with autocomplete */}
-<div className="col-span-4" ref={wrapperRef}>
-  <Label className="text-xs text-gray-400 mb-1 block">Item Name</Label>
-  <div className="relative">
-    <Input
-      ref={inputRef}
-      placeholder="Type to search inventory..."
-      value={item.description}
-      onChange={(e) => handleDescriptionChange(e.target.value)}
-      onFocus={() => {
-        if (suggestions.length > 0 && inputRef.current) {
-  const rect = inputRef.current.getBoundingClientRect();
-  setDropdownPos({
-    top: rect.bottom + 4,       // ← remove window.scrollY
-    left: rect.left,            // ← remove window.scrollX
-    width: rect.width,
-  });
-  setShowSuggestions(true);
-}
+        <div className="col-span-4" ref={wrapperRef}>
+          <Label className="text-xs text-gray-400 mb-1 block">Item Name</Label>
+          <div className="relative">
+            <Input
+              ref={inputRef}
+              placeholder="Type to search inventory..."
+              value={item.description}
+              onChange={(e) => handleDescriptionChange(e.target.value)}
+              onFocus={() => {
+                if (suggestions.length > 0 && inputRef.current) {
+                  const rect = inputRef.current.getBoundingClientRect();
+                  setDropdownPos({
+                    top: rect.bottom + 4,       // ← remove window.scrollY
+                    left: rect.left,            // ← remove window.scrollX
+                    width: rect.width,
+                  });
+                  setShowSuggestions(true);
+                }
 
-      }}
-      autoComplete="off"
-    />
-    {isSearching && (
-      <div className="absolute right-2 top-1/2 -translate-y-1/2">
-        <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-green-500 rounded-full animate-spin" />
-      </div>
-    )}
-  </div>
-
-  {/* Portal dropdown — renders above everything using fixed position */}
-  {showSuggestions && suggestions.length > 0 && typeof window !== "undefined" && (
-    <div
-      style={{
-        position: "fixed",
-        top: dropdownPos.top,
-        left: dropdownPos.left,
-        width: dropdownPos.width,
-        zIndex: 9999,
-      }}
-      className="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
-    >
-      {suggestions.map((product) => (
-        <button
-          key={product.id}
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            handleSelectSuggestion(product);
-          }}
-          className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-green-50 transition-colors text-left border-b border-gray-50 last:border-0"
-        >
-          <Package className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-xs text-green-600 font-semibold">₹{product.unit_price}</span>
-              {product.sku && <span className="text-xs text-gray-400">SKU: {product.sku}</span>}
-              {product.hsn_code && <span className="text-xs text-gray-400">HSN: {product.hsn_code}</span>}
-            </div>
+              }}
+              autoComplete="off"
+            />
+            {isSearching && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-green-500 rounded-full animate-spin" />
+              </div>
+            )}
           </div>
-        </button>
-      ))}
+
+          {/* Portal dropdown — renders above everything using fixed position */}
+          {showSuggestions && suggestions.length > 0 && typeof window !== "undefined" && (
+  <div
+    style={{
+      position: "fixed",
+      top: dropdownPos.top,
+      left: dropdownPos.left,
+      width: Math.max(dropdownPos.width, 360),
+      zIndex: 9999,
+    }}
+    className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden"
+  >
+    <div className="px-3 py-1.5 border-b border-gray-100 bg-gray-50">
+      <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+        Inventory results
+      </p>
     </div>
-  )}
-</div>
+
+    {suggestions.map((product) => (
+      <button
+        key={product.id}
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          handleSelectSuggestion(product);
+        }}
+        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-green-50 transition-colors text-left border-b border-gray-50 last:border-0"
+      >
+        {/* Icon */}
+        <div className="w-8 h-8 rounded-lg bg-green-50 border border-green-100 flex items-center justify-center shrink-0">
+          <Package className="w-4 h-4 text-green-500" />
+        </div>
+
+        {/* Name + meta */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {product.sku && (
+              <span className="text-xs text-gray-400">SKU: {product.sku}</span>
+            )}
+            {product.hsn_code && (
+              <span className="text-xs text-gray-400">HSN: {product.hsn_code}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Price + Stock — right side */}
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="text-sm font-semibold text-gray-800">
+            ₹{product.unit_price.toLocaleString("en-IN")}
+          </span>
+          {product.current_stock !== undefined && (
+            <span
+              className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                product.current_stock <= 0
+                  ? "bg-red-50 text-red-500 border border-red-100"
+                  : product.current_stock <= 5
+                  ? "bg-amber-50 text-amber-600 border border-amber-100"
+                  : "bg-green-50 text-green-600 border border-green-100"
+              }`}
+            >
+              {product.current_stock <= 0
+                ? "Out of stock"
+                : `${product.current_stock} in stock`}
+            </span>
+          )}
+        </div>
+      </button>
+    ))}
+  </div>
+)}
+        </div>
+
+
+
 
         {/* HSN */}
         <div className="col-span-2">
