@@ -181,8 +181,8 @@ const Inventory = () => {
 
   // ── Public store link ──────────────────────────────────
   const publicStoreUrl = user && ownerId
-  ? `${window.location.origin}/store/${ownerId}`
-  : "";
+    ? `${window.location.origin}/store/${ownerId}`
+    : "";
   const [linkCopied, setLinkCopied] = useState(false);
 
   const handleCopyStoreLink = () => {
@@ -278,7 +278,7 @@ const Inventory = () => {
     const savedType = localStorage.getItem(`inventory_business_type_${ownerId}`);
     if (savedType && BUSINESS_TYPES[savedType]) setBusinessType(savedType);
     const savedFields = localStorage.getItem(`inventory_custom_fields_${ownerId}`);
-    if (savedFields) { try { setCustomFields(JSON.parse(savedFields)); } catch {} }
+    if (savedFields) { try { setCustomFields(JSON.parse(savedFields)); } catch { } }
   }, [ownerId]);
 
   useEffect(() => { if (ownerId) { fetchProducts(); fetchLowStockProducts(); } }, [ownerId]);
@@ -586,14 +586,14 @@ const Inventory = () => {
               <div>
                 {/* <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Your Public Store</p> */}
                 <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
-  {activeCompany && !activeCompany.isOwn ? `${activeCompany.companyName}'s Store` : "Your Public Store"}
-</p>
+                  {activeCompany && !activeCompany.isOwn ? `${activeCompany.companyName}'s Store` : "Your Public Store"}
+                </p>
                 {/* <p className="text-[11px] text-indigo-400">Customers can browse your live inventory at this link</p> */}
                 <p className="text-[11px] text-indigo-400">
-  {activeCompany && !activeCompany.isOwn
-    ? `Sharing ${activeCompany.companyName}'s store`
-    : "Customers can browse your live inventory at this link"}
-</p>
+                  {activeCompany && !activeCompany.isOwn
+                    ? `Sharing ${activeCompany.companyName}'s store`
+                    : "Customers can browse your live inventory at this link"}
+                </p>
               </div>
             </div>
             <div className="flex-1 flex items-center gap-2 bg-white border border-indigo-200 rounded-lg px-3 py-1.5 min-w-0">
@@ -726,226 +726,226 @@ const Inventory = () => {
               <div className="text-center py-8 text-muted-foreground">No products found.</div>
             ) : (
               <div className="overflow-x-auto">
-  <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
-    <colgroup>
-      <col style={{ width: "36px" }} />
-      <col style={{ width: "22%" }} />
-      <col style={{ width: "10%" }} />
-      <col style={{ width: "34%" }} />
-      <col style={{ width: "11%" }} />
-      <col style={{ width: "13%" }} />
-    </colgroup>
-    <thead>
-      <tr style={{ borderBottom: "1px solid var(--border)" }}>
-        {["#", "Product", "Category", "Variants & Stock", "Status", ""].map((h, i) => (
-          <th
-            key={i}
-            className="pb-2 pt-1"
-            style={{
-              fontSize: 11,
-              fontWeight: 500,
-              color: "var(--muted-foreground)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              textAlign: i === 5 ? "right" : "left",
-              paddingLeft: i === 0 ? 0 : 12,
-              paddingRight: i === 5 ? 0 : 12,
-            }}
-          >
-            {h}
-          </th>
-        ))}
-      </tr>
-    </thead>
-    <tbody>
-      {filteredProducts.map((product, idx) => {
-        const ss = getStockStatus(product);
-        const pv = parseVariants(product);
-        const photos = parsePhotoUrls(product);
-        const totalQty = pv.length > 0
-          ? pv.reduce((s, v) => s + (v.stock_quantity || 0), 0)
-          : product.current_stock;
-
-        const statusDot = ss.status === "In Stock"
-          ? "bg-green-500"
-          : ss.status === "Low Stock"
-          ? "bg-yellow-500"
-          : "bg-red-500";
-
-        const statusText = ss.status === "In Stock"
-          ? "text-green-800"
-          : ss.status === "Low Stock"
-          ? "text-yellow-800"
-          : "text-red-700";
-
-        return (
-          <tr
-            key={product.id}
-            className="hover:bg-muted/30 transition-colors"
-            style={{ borderBottom: "0.5px solid hsl(var(--border))" }}
-          >
-
-            {/* Index */}
-            <td className="py-3 align-top" style={{ paddingLeft: 0, paddingRight: 12 }}>
-              <span style={{ fontSize: 11, color: "var(--muted-foreground)", fontVariantNumeric: "tabular-nums" }}>
-                {String(idx + 1).padStart(2, "0")}
-              </span>
-            </td>
-
-            {/* Name + description */}
-            <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 12 }}>
-              <div className="flex items-start gap-2.5">
-                {photos.length > 0 && (
-                  <div className="relative shrink-0 mt-0.5">
-                    <img
-                      src={photos[0]}
-                      alt={product.name}
-                      className="w-9 h-9 object-cover rounded-md border"
-                      style={{ borderColor: "hsl(var(--border))" }}
-                    />
-                    {photos.length > 1 && (
-                      <span className="absolute -bottom-1 -right-1 bg-gray-700 text-white text-[9px] font-semibold rounded-full w-3.5 h-3.5 flex items-center justify-center">
-                        {photos.length}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <div className="font-medium text-sm leading-snug" style={{ letterSpacing: "-0.1px" }}>
-                    {product.name}
-                  </div>
-                  {product.description && (
-                    <div
-                      className="mt-0.5 text-muted-foreground"
-                      style={{
-                        fontSize: 12,
-                        lineHeight: 1.5,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {product.description}
-                    </div>
-                  )}
-                  {product.sku && (
-                    <div className="mt-1 font-mono text-muted-foreground" style={{ fontSize: 10 }}>
-                      {product.sku}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </td>
-
-            {/* Category */}
-            <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 12 }}>
-              {product.category ? (
-                <span
-                  className="inline-block text-muted-foreground border rounded-full"
-                  style={{ fontSize: 11, padding: "2px 8px", borderColor: "hsl(var(--border))" }}
-                >
-                  {product.category}
-                </span>
-              ) : (
-                <span className="text-muted-foreground" style={{ fontSize: 12 }}>—</span>
-              )}
-            </td>
-
-            {/* Variants & Stock */}
-            <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 12 }}>
-              <div className="flex flex-col gap-1">
-                {pv.length > 0 ? pv.map((v) => {
-                  const qty = v.stock_quantity ?? 0;
-                  const isOut = qty === 0;
-                  const isLow = !isOut && qty <= (v.min_stock_level || 0);
-                  const qtyColor = isOut ? "text-red-600" : isLow ? "text-yellow-700" : "text-foreground";
-                  return (
-                    <div
-                      key={v.id}
-                      className="grid items-center gap-2 text-xs"
-                      style={{ gridTemplateColumns: "1fr auto auto auto" }}
-                    >
-                      <span
-                        className="text-muted-foreground font-medium truncate"
-                        title={getVariantLabel(v)}
-                      >
-                        {getVariantLabel(v)}
-                      </span>
-                      <span className={`font-semibold tabular-nums ${qtyColor}`}>
-                        {qty} <span className="font-normal text-muted-foreground">u</span>
-                      </span>
-                      <span className="text-muted-foreground tabular-nums">
-                        ₹{(v.unit_price ?? 0).toLocaleString("en-IN")}
-                      </span>
-                      {v.cost_price > 0 && (
-                        <span
-                          className="text-muted-foreground tabular-nums line-through"
-                          style={{ fontSize: 11 }}
+                <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
+                  <colgroup>
+                    <col style={{ width: "36px" }} />
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "34%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "13%" }} />
+                  </colgroup>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      {["#", "Product", "Category", "Variants & Stock", "Status", ""].map((h, i) => (
+                        <th
+                          key={i}
+                          className="pb-2 pt-1"
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 500,
+                            color: "var(--muted-foreground)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                            textAlign: i === 5 ? "right" : "left",
+                            paddingLeft: i === 0 ? 0 : 12,
+                            paddingRight: i === 5 ? 0 : 12,
+                          }}
                         >
-                          ₹{(v.cost_price).toLocaleString("en-IN")}
-                        </span>
-                      )}
-                    </div>
-                  );
-                }) : (
-                  <div className="flex items-center gap-3 text-xs">
-                    <span className="font-semibold tabular-nums">{product.current_stock} {product.unit}</span>
-                    <span className="text-muted-foreground">₹{product.unit_price.toLocaleString("en-IN")}</span>
-                  </div>
-                )}
-              </div>
-              <div
-                className="mt-1.5 pt-1.5 text-muted-foreground"
-                style={{ fontSize: 11, borderTop: "0.5px solid hsl(var(--border))" }}
-              >
-                Total <span className="font-medium text-foreground">{totalQty}</span> · min {product.min_stock_level}
-              </div>
-            </td>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProducts.map((product, idx) => {
+                      const ss = getStockStatus(product);
+                      const pv = parseVariants(product);
+                      const photos = parsePhotoUrls(product);
+                      const totalQty = pv.length > 0
+                        ? pv.reduce((s, v) => s + (v.stock_quantity || 0), 0)
+                        : product.current_stock;
 
-            {/* Status */}
-            <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 12 }}>
-              <span className={`flex items-center gap-1.5 text-xs font-medium ${statusText}`}>
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot}`} />
-                {ss.status}
-              </span>
-            </td>
+                      const statusDot = ss.status === "In Stock"
+                        ? "bg-green-500"
+                        : ss.status === "Low Stock"
+                          ? "bg-yellow-500"
+                          : "bg-red-500";
 
-            {/* Actions */}
-            <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 0, textAlign: "right" }}>
-              <div className="flex items-center gap-1.5 justify-end">
-                <Button
-                  size="sm" variant="ghost"
-                  className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => handleEdit(product)}
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                </Button>
-                {canDelete && (
-                  <Button
-                    size="sm" variant="ghost"
-                    className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
-                    onClick={() => handleDeleteProduct(product.id)}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-                <Button
-                  size="sm" variant="outline"
-                  className="h-7 px-2.5 text-xs font-medium"
-                  onClick={() => setViewProduct(product)}
-                >
-                  View
-                </Button>
+                      const statusText = ss.status === "In Stock"
+                        ? "text-green-800"
+                        : ss.status === "Low Stock"
+                          ? "text-yellow-800"
+                          : "text-red-700";
+
+                      return (
+                        <tr
+                          key={product.id}
+                          className="hover:bg-muted/30 transition-colors"
+                          style={{ borderBottom: "0.5px solid hsl(var(--border))" }}
+                        >
+
+                          {/* Index */}
+                          <td className="py-3 align-top" style={{ paddingLeft: 0, paddingRight: 12 }}>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", fontVariantNumeric: "tabular-nums" }}>
+                              {String(idx + 1).padStart(2, "0")}
+                            </span>
+                          </td>
+
+                          {/* Name + description */}
+                          <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 12 }}>
+                            <div className="flex items-start gap-2.5">
+                              {photos.length > 0 && (
+                                <div className="relative shrink-0 mt-0.5">
+                                  <img
+                                    src={photos[0]}
+                                    alt={product.name}
+                                    className="w-9 h-9 object-cover rounded-md border"
+                                    style={{ borderColor: "hsl(var(--border))" }}
+                                  />
+                                  {photos.length > 1 && (
+                                    <span className="absolute -bottom-1 -right-1 bg-gray-700 text-white text-[9px] font-semibold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                                      {photos.length}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="font-medium text-sm leading-snug" style={{ letterSpacing: "-0.1px" }}>
+                                  {product.name}
+                                </div>
+                                {product.description && (
+                                  <div
+                                    className="mt-0.5 text-muted-foreground"
+                                    style={{
+                                      fontSize: 12,
+                                      lineHeight: 1.5,
+                                      display: "-webkit-box",
+                                      WebkitLineClamp: 2,
+                                      WebkitBoxOrient: "vertical",
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    {product.description}
+                                  </div>
+                                )}
+                                {product.sku && (
+                                  <div className="mt-1 font-mono text-muted-foreground" style={{ fontSize: 10 }}>
+                                    {product.sku}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Category */}
+                          <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 12 }}>
+                            {product.category ? (
+                              <span
+                                className="inline-block text-muted-foreground border rounded-full"
+                                style={{ fontSize: 11, padding: "2px 8px", borderColor: "hsl(var(--border))" }}
+                              >
+                                {product.category}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground" style={{ fontSize: 12 }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Variants & Stock */}
+                          <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 12 }}>
+                            <div className="flex flex-col gap-1">
+                              {pv.length > 0 ? pv.map((v) => {
+                                const qty = v.stock_quantity ?? 0;
+                                const isOut = qty === 0;
+                                const isLow = !isOut && qty <= (v.min_stock_level || 0);
+                                const qtyColor = isOut ? "text-red-600" : isLow ? "text-yellow-700" : "text-foreground";
+                                return (
+                                  <div
+                                    key={v.id}
+                                    className="grid items-center gap-2 text-xs"
+                                    style={{ gridTemplateColumns: "1fr auto auto auto" }}
+                                  >
+                                    <span
+                                      className="text-muted-foreground font-medium truncate"
+                                      title={getVariantLabel(v)}
+                                    >
+                                      {getVariantLabel(v)}
+                                    </span>
+                                    <span className={`font-semibold tabular-nums ${qtyColor}`}>
+                                      {qty} <span className="font-normal text-muted-foreground">u</span>
+                                    </span>
+                                    <span className="text-muted-foreground tabular-nums">
+                                      ₹{(v.unit_price ?? 0).toLocaleString("en-IN")}
+                                    </span>
+                                    {v.cost_price > 0 && (
+                                      <span
+                                        className="text-muted-foreground tabular-nums line-through"
+                                        style={{ fontSize: 11 }}
+                                      >
+                                        ₹{(v.cost_price).toLocaleString("en-IN")}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }) : (
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="font-semibold tabular-nums">{product.current_stock} {product.unit}</span>
+                                  <span className="text-muted-foreground">₹{product.unit_price.toLocaleString("en-IN")}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div
+                              className="mt-1.5 pt-1.5 text-muted-foreground"
+                              style={{ fontSize: 11, borderTop: "0.5px solid hsl(var(--border))" }}
+                            >
+                              Total <span className="font-medium text-foreground">{totalQty}</span> · min {product.min_stock_level}
+                            </div>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 12 }}>
+                            <span className={`flex items-center gap-1.5 text-xs font-medium ${statusText}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot}`} />
+                              {ss.status}
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3 align-top" style={{ paddingLeft: 12, paddingRight: 0, textAlign: "right" }}>
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <Button
+                                size="sm" variant="ghost"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                onClick={() => handleEdit(product)}
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </Button>
+                              {canDelete && (
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
+                                  onClick={() => handleDeleteProduct(product.id)}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                              <Button
+                                size="sm" variant="outline"
+                                className="h-7 px-2.5 text-xs font-medium"
+                                onClick={() => setViewProduct(product)}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          </td>
+
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </td>
-
-          </tr>
-        );
-      })}
-    </tbody>
-  </table>
-</div>
             )}
           </CardContent>
         </Card>
@@ -968,11 +968,10 @@ const Inventory = () => {
                     localStorage.removeItem(`inventory_custom_fields_${ownerId}`);
                     toast({ title: `Switched to ${cfg.label}` });
                   }}
-                  className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                    businessType === key
+                  className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${businessType === key
                       ? "border-green-500 bg-green-50 shadow-sm"
                       : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
                   <span className="text-2xl">{cfg.icon}</span>
                   <div className="min-w-0 flex-1">

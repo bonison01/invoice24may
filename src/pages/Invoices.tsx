@@ -40,6 +40,7 @@ export interface InvoiceItem {
   itemTaxAmount?: number;
   variantId?: string;
   variantDetails?: string;
+  inventoryProductId?: string;
 }
 
 export interface Customer {
@@ -68,14 +69,13 @@ export interface Invoice {
   paymentInstructions: string;
   thankYouNote: string;
   inclusiveTax: boolean;
-  created_by?: string | null; // ← added
+  created_by?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────
 
-// ── Invoice Details Card ──────────────────────────────────
 const InvoiceDetailsCard = ({
   invoice, setInvoice, user, businessName, setBusinessName,
 }: {
@@ -116,11 +116,10 @@ const InvoiceDetailsCard = ({
         </div>
       </div>
       {invoice.paymentStatus && (
-        <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-          invoice.paymentStatus === "Paid" ? "bg-green-100 text-green-700 border-green-200"
-          : invoice.paymentStatus === "Unpaid" ? "bg-red-100 text-red-700 border-red-200"
-          : "bg-yellow-100 text-yellow-700 border-yellow-200"
-        }`}>{invoice.paymentStatus}</div>
+        <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${invoice.paymentStatus === "Paid" ? "bg-green-100 text-green-700 border-green-200"
+            : invoice.paymentStatus === "Unpaid" ? "bg-red-100 text-red-700 border-red-200"
+              : "bg-yellow-100 text-yellow-700 border-yellow-200"
+          }`}>{invoice.paymentStatus}</div>
       )}
       {!user && (
         <div>
@@ -132,7 +131,6 @@ const InvoiceDetailsCard = ({
   </Card>
 );
 
-// ── Customer Card ─────────────────────────────────────────
 const CustomerCard = ({
   invoice, setInvoice, onAddNew,
 }: {
@@ -164,7 +162,6 @@ const CustomerCard = ({
   </Card>
 );
 
-// ── Line Items Card ───────────────────────────────────────
 const ItemsCard = ({
   invoice, onAddItem, onUpdate, onDelete, onBulkUpload, onProductSelector, onInventorySearch,
 }: {
@@ -214,7 +211,6 @@ const ItemsCard = ({
   </Card>
 );
 
-// ── Totals Card ───────────────────────────────────────────
 const TotalsCard = ({
   invoice, setInvoice,
 }: {
@@ -302,7 +298,6 @@ const TotalsCard = ({
   </Card>
 );
 
-// ── Notes Card ────────────────────────────────────────────
 const NotesCard = ({
   invoice, setInvoice,
 }: {
@@ -326,7 +321,6 @@ const NotesCard = ({
   </Card>
 );
 
-// ── Add Customer Dialog ───────────────────────────────────
 const AddCustomerDialog = ({
   open, onOpenChange, newCustomer, setNewCustomer, onSave, isSaving,
 }: {
@@ -353,6 +347,21 @@ const AddCustomerDialog = ({
     </DialogContent>
   </Dialog>
 );
+
+// ─────────────────────────────────────────────────────────
+// HELPER: compute real stock (mirrors searchInventory logic)
+// ─────────────────────────────────────────────────────────
+const computeRealStock = (currentStock: number, variantsJson: string | null): number => {
+  if (variantsJson) {
+    try {
+      const parsed = JSON.parse(variantsJson);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.reduce((sum: number, v: any) => sum + (v.stock_quantity ?? 0), 0);
+      }
+    } catch {}
+  }
+  return currentStock ?? 0;
+};
 
 // ─────────────────────────────────────────────────────────
 // MAIN PAGE
@@ -393,7 +402,7 @@ const Invoices = () => {
     paymentInstructions: "Payment due within 10 days. Thank you for your business!",
     thankYouNote: "Thank you for choosing our services.",
     inclusiveTax: false,
-    created_by: null, // ← added
+    created_by: null,
   });
 
   useEffect(() => { calculateTotals(); }, [invoice.items, invoice.taxRate, invoice.discountType, invoice.discountValue, invoice.inclusiveTax]);
@@ -429,12 +438,22 @@ const Invoices = () => {
     try {
       const { data, error } = await (supabase as any)
         .from("inventory_products")
-        .select("id, name, description, sku, unit_price, current_stock, hsn_code")
+        .select("id, name, description, sku, unit_price, current_stock, hsn_code, variants")
         .eq("user_id", ownerId)
         .ilike("name", `%${query}%`)
         .limit(8);
       if (error) throw error;
-      return (data || []) as InventorySearchResult[];
+
+      return (data || []).map((product: any) => ({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        sku: product.sku,
+        unit_price: product.unit_price,
+        // ── Same variant-sum logic used in save validation ──
+        current_stock: computeRealStock(product.current_stock, product.variants),
+        hsn_code: product.hsn_code,
+      }));
     } catch {
       return [];
     }
@@ -489,6 +508,7 @@ const Invoices = () => {
       itemDiscountAmount: 0, itemTaxAmount: 0,
       variantId: variant?.id,
       variantDetails: variant ? `${variant.size} / ${variant.color} / ${variant.brand}` : undefined,
+      inventoryProductId: product.id,
     };
     setInvoice((prev) => ({ ...prev, items: [...prev.items, newItem] }));
   };
@@ -518,18 +538,241 @@ const Invoices = () => {
       toast({ title: "Customer added!", description: "Customer added and selected." });
       setShowAddCustomer(false);
       setNewCustomer({ name: "", email: "", address: "", phone: "" });
-    } catch (err) {
+    } catch {
       toast({ title: "Error", description: "Failed to add customer", variant: "destructive" });
     }
     setIsSavingCustomer(false);
   };
 
-  const saveInvoice = async () => {
-    if (!user) { toast({ title: "Authentication required", description: "Please sign in to save invoices.", variant: "destructive" }); return; }
-    if (!invoice.customer) { toast({ title: "Customer required", description: "Please select a customer before saving.", variant: "destructive" }); return; }
-    setIsLoading(true);
+  const deductInventoryStock = async (items: InvoiceItem[]) => {
+  for (const item of items) {
+    if (!item.description) continue;
+
     try {
-      // ── Resolve created_by: only set when a staff member (non-owner) creates the invoice ──
+      let productId: string | null = item.inventoryProductId ?? null;
+      let currentStock = 0;
+      let variantsJson: string | null = null;
+
+      // Get product
+      if (productId) {
+        const { data, error } = await (supabase as any)
+          .from("inventory_products")
+          .select("id, name, current_stock, variants")
+          .eq("id", productId)
+          .single();
+
+        if (error || !data) {
+          console.error("Product not found:", productId);
+          continue;
+        }
+
+        currentStock = data.current_stock ?? 0;
+        variantsJson = data.variants;
+      } else {
+        const productName = item.description.split("\n")[0].trim();
+
+        const { data: products, error } = await (supabase as any)
+          .from("inventory_products")
+          .select("id, name, current_stock, variants")
+          .eq("user_id", ownerId)
+          .eq("name", productName)
+          .limit(1);
+
+        if (error || !products?.length) {
+          console.error("Product not found by name:", productName);
+          continue;
+        }
+
+        const product = products[0];
+
+        productId = product.id;
+        currentStock = product.current_stock ?? 0;
+        variantsJson = product.variants;
+      }
+
+      // Parse variants
+      let variants: any[] = [];
+
+      try {
+        variants = variantsJson ? JSON.parse(variantsJson) : [];
+      } catch (err) {
+        console.error("Failed to parse variants:", err);
+        variants = [];
+      }
+
+      // ==========================
+      // VARIANT PRODUCT
+      // ==========================
+      if (item.variantId && variants.length > 0) {
+        const updatedVariants = variants.map((v: any) =>
+          v.id === item.variantId
+            ? {
+                ...v,
+                stock_quantity: Math.max(
+                  0,
+                  (v.stock_quantity ?? 0) - item.quantity
+                ),
+              }
+            : v
+        );
+
+        const newTotalStock = updatedVariants.reduce(
+          (sum: number, v: any) => sum + (v.stock_quantity ?? 0),
+          0
+        );
+
+        const { error } = await (supabase as any)
+          .from("inventory_products")
+          .update({
+            variants: JSON.stringify(updatedVariants),
+            current_stock: newTotalStock,
+          })
+          .eq("id", productId);
+
+        if (error) {
+          console.error("Variant stock update failed:", error);
+        } else {
+          console.log("Variant stock deducted:", productId);
+        }
+
+        continue;
+      }
+
+      // ==========================
+      // NON-VARIANT PRODUCT
+      // ==========================
+      if (variants.length === 0) {
+        const newStock = Math.max(
+          0,
+          Number(currentStock) - Number(item.quantity)
+        );
+
+        const { error } = await (supabase as any)
+          .from("inventory_products")
+          .update({
+            current_stock: newStock,
+          })
+          .eq("id", productId);
+
+        if (error) {
+          console.error("Stock update failed:", error);
+        } else {
+          console.log(
+            `Stock deducted: ${currentStock} → ${newStock}`
+          );
+        }
+
+        continue;
+      }
+
+      // ==========================
+      // PRODUCT HAS VARIANTS
+      // BUT NO variantId
+      // (Autocomplete selection case)
+      // ==========================
+      const updatedVariants = [...variants];
+
+      let qtyToDeduct = item.quantity;
+
+      for (let i = 0; i < updatedVariants.length; i++) {
+        const stock = updatedVariants[i].stock_quantity ?? 0;
+
+        if (stock <= 0) continue;
+
+        if (stock >= qtyToDeduct) {
+          updatedVariants[i].stock_quantity = stock - qtyToDeduct;
+          qtyToDeduct = 0;
+          break;
+        } else {
+          qtyToDeduct -= stock;
+          updatedVariants[i].stock_quantity = 0;
+        }
+      }
+
+      const newTotalStock = updatedVariants.reduce(
+        (sum: number, v: any) => sum + (v.stock_quantity ?? 0),
+        0
+      );
+
+      const { error } = await (supabase as any)
+        .from("inventory_products")
+        .update({
+          variants: JSON.stringify(updatedVariants),
+          current_stock: newTotalStock,
+        })
+        .eq("id", productId);
+
+      if (error) {
+        console.error("Variant deduction failed:", error);
+      } else {
+        console.log(
+          `Variant stock deducted successfully. New stock: ${newTotalStock}`
+        );
+      }
+    } catch (err) {
+      console.error("Deduct stock error:", err);
+    }
+  }
+};
+
+  const saveInvoice = async () => {
+    if (!user) {
+      toast({ title: "Authentication required", description: "Please sign in to save invoices.", variant: "destructive" });
+      return;
+    }
+    if (!invoice.customer) {
+      toast({ title: "Customer required", description: "Please select a customer before saving.", variant: "destructive" });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // ── Pre-save stock validation ──────────────────────────────────────
+      for (const item of invoice.items) {
+        if (!item.inventoryProductId) continue;
+
+        const { data: prod, error } = await (supabase as any)
+          .from("inventory_products")
+          .select("name, current_stock, variants")
+          .eq("id", item.inventoryProductId)
+          .single();
+
+        if (error || !prod) continue;
+
+        if (item.variantId) {
+          // ── Variant item: check the specific variant's stock_quantity ──
+          let variants: any[] = [];
+          try { variants = prod.variants ? JSON.parse(prod.variants) : []; } catch {}
+          const matchedVariant = variants.find((v: any) => v.id === item.variantId);
+          const available = matchedVariant?.stock_quantity ?? 0;
+
+          if (item.quantity > available) {
+            toast({
+              title: "Insufficient stock",
+              description: `"${prod.name}" (${item.variantDetails ?? "variant"}) — only ${available} unit(s) available, you need ${item.quantity}.`,
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          // ── Non-variant item: use variant-sum logic (mirrors searchInventory) ──
+          const realStock = computeRealStock(prod.current_stock, prod.variants);
+
+          if (item.quantity > realStock) {
+            toast({
+              title: "Insufficient stock",
+              description: `"${prod.name}" — only ${realStock} unit(s) available, you need ${item.quantity}.`,
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+      // ── End stock validation ───────────────────────────────────────────
+
       const createdBy = activeCompany && !activeCompany.isOwn
         ? (user.user_metadata?.full_name ?? user.email ?? user.id ?? "Unknown")
         : null;
@@ -556,20 +799,28 @@ const Invoices = () => {
         signature_url: businessSettings?.signature_url || "",
         number_of_days: invoice.numberOfDays,
         payment_status: invoice.paymentStatus,
-        created_by: createdBy, // ← added
+        created_by: createdBy,
       };
+
       const { error } = await supabase.from("saved_invoices").insert(invoiceData);
       if (error) throw error;
+
+      await deductInventoryStock(invoice.items);
+
       toast({ title: "Invoice saved!", description: "Successfully saved." });
       navigate("/saved-invoices");
-    } catch (err) {
+    } catch {
       toast({ title: "Error", description: "Failed to save invoice.", variant: "destructive" });
     }
+
     setIsLoading(false);
   };
 
   const exportToPDF = () => {
-    if (!invoice.customer) { toast({ title: "Missing Customer", description: "Please select a customer before exporting.", variant: "destructive" }); return; }
+    if (!invoice.customer) {
+      toast({ title: "Missing Customer", description: "Please select a customer before exporting.", variant: "destructive" });
+      return;
+    }
     toast({ title: "Preparing Download", description: "Generating your invoice PDF..." });
     setTriggerDownload(true);
   };
@@ -632,7 +883,6 @@ const Invoices = () => {
     </div>
   );
 
-  // ── Shared props for ItemsCard ─────────────────────────
   const itemsCardProps = {
     invoice,
     onAddItem: addItem,
@@ -656,8 +906,6 @@ const Invoices = () => {
               <InvoiceDetailsCard invoice={invoice} setInvoice={setInvoice} user={user} businessName={businessName} setBusinessName={setBusinessName} />
               <CustomerCard invoice={invoice} setInvoice={setInvoice} onAddNew={() => setShowAddCustomer(true)} />
               <ItemsCard {...itemsCardProps} />
-
-              {/* Totals — original style with GST checkbox on top */}
               <Card>
                 <div className="flex items-center gap-3 mt-2 p-2 rounded-md hover:bg-gray-50 transition">
                   <input type="checkbox" checked={invoice.inclusiveTax}
@@ -706,7 +954,6 @@ const Invoices = () => {
                   </div>
                 </CardContent>
               </Card>
-
               <NotesCard invoice={invoice} setInvoice={setInvoice} />
             </div>
             {showPreview && <div className="lg:sticky lg:top-8">{previewPanel}</div>}

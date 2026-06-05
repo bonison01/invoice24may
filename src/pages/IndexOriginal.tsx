@@ -17,7 +17,6 @@ import {
   Package,
   Building2,
   Users2,
-  CreditCard,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -230,58 +229,23 @@ const Index = () => {
                 </CardContent>
               </Card>
 
-              {/* Team & Roles — expanded with Employee Management sub-section */}
-              <Card className="hover:shadow-lg transition-shadow md:col-span-2 lg:col-span-2">
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => navigate("/team-settings")}
+              >
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Users2 className="w-5 h-5" />
                     Team & Roles
                   </CardTitle>
                   <CardDescription>
-                    Manage teammates and employee records
+                    Grant teammates access to your data
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Team access row */}
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
-                        <Users2 className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">Team Access</p>
-                        <p className="text-xs text-gray-500">Grant teammates access to your data</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate("/team-settings")}
-                    >
-                      Manage Team
-                    </Button>
-                  </div>
-
-                  {/* Employee Management row */}
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center">
-                        <CreditCard className="w-4 h-4 text-amber-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">Employee Management</p>
-                        <p className="text-xs text-gray-500">Add staff and generate ID cards</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-amber-300 text-amber-700 hover:bg-amber-100"
-                      onClick={() => navigate("/employees")}
-                    >
-                      Manage Employees
-                    </Button>
-                  </div>
+                <CardContent>
+                  <Button className="w-full" variant="outline">
+                    Manage Team
+                  </Button>
                 </CardContent>
               </Card>
             </>

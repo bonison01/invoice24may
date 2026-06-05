@@ -20,6 +20,8 @@ import Cashbook from "./pages/Cashbook";
 import PurchaseInvoices from "./pages/PurchaseInvoices";
 import TeamSettings from "./pages/TeamSettings";
 import PublicStore from "./pages/PublicStore";
+import Employees from "@/pages/Employees";
+import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
 const queryClient = new QueryClient();
 
@@ -32,76 +34,52 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-
-              {/* ── Fully public — no auth, no Layout wrapper ── */}
+              {/* Fully public — no auth, no Layout */}
               <Route path="/store/:userId" element={<PublicStore />} />
+              <Route path="/onboard/:userId" element={<EmployeeOnboarding />} />
 
-              {/* ── Auth — no layout ── */}
+              {/* Auth — no layout */}
               <Route path="/auth" element={<Auth />} />
 
-              {/* ── All app routes through Layout ── */}
+              {/* All app routes through Layout */}
               <Route element={<Layout />}>
                 <Route path="/" element={<Index />} />
-
                 <Route path="/invoices" element={
-                  <RoleGuard section="invoices">
-                    <Invoices />
-                  </RoleGuard>
+                  <RoleGuard section="invoices"><Invoices /></RoleGuard>
                 } />
-
                 <Route path="/cashbook" element={
-                  <RoleGuard section="cashbook">
-                    <Cashbook />
-                  </RoleGuard>
+                  <RoleGuard section="cashbook"><Cashbook /></RoleGuard>
                 } />
-
                 <Route path="/customers" element={
                   <ProtectedRoute>
-                    <RoleGuard section="customers">
-                      <Customers />
-                    </RoleGuard>
+                    <RoleGuard section="customers"><Customers /></RoleGuard>
                   </ProtectedRoute>
                 } />
-
                 <Route path="/inventory" element={
                   <ProtectedRoute>
-                    <RoleGuard section="inventory">
-                      <Inventory />
-                    </RoleGuard>
+                    <RoleGuard section="inventory"><Inventory /></RoleGuard>
                   </ProtectedRoute>
                 } />
-
                 <Route path="/purchase-invoices" element={
-                  <ProtectedRoute>
-                    <PurchaseInvoices />
-                  </ProtectedRoute>
+                  <ProtectedRoute><PurchaseInvoices /></ProtectedRoute>
                 } />
-
                 <Route path="/business-settings" element={
-                  <ProtectedRoute>
-                    <BusinessSettings />
-                  </ProtectedRoute>
+                  <ProtectedRoute><BusinessSettings /></ProtectedRoute>
                 } />
-
                 <Route path="/saved-invoices" element={
-                  <ProtectedRoute>
-                    <SavedInvoices />
-                  </ProtectedRoute>
+                  <ProtectedRoute><SavedInvoices /></ProtectedRoute>
                 } />
-
                 <Route path="/bulk-upload" element={
-                  <ProtectedRoute>
-                    <BulkUpload />
-                  </ProtectedRoute>
+                  <ProtectedRoute><BulkUpload /></ProtectedRoute>
                 } />
-
                 <Route path="/team-settings" element={
-                  <ProtectedRoute>
-                    <TeamSettings />
-                  </ProtectedRoute>
+                  <ProtectedRoute><TeamSettings /></ProtectedRoute>
+                } />
+                {/* Employees — protected, inside Layout so Navbar is shared */}
+                <Route path="/employees" element={
+                  <ProtectedRoute><Employees /></ProtectedRoute>
                 } />
               </Route>
-
             </Routes>
           </BrowserRouter>
         </TooltipProvider>

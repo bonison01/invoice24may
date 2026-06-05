@@ -1,27 +1,31 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
 
   const toggleMenu = () => setIsOpen(!isOpen);
   const toggleDropdown = () => setDropdownOpen((prev) => !prev);
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
+
   // Close dropdown if clicked outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setDropdownOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -69,24 +73,28 @@ const Navbar = () => {
                     <NavLink
                       to="/saved-invoices"
                       className="block px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                      onClick={() => setDropdownOpen(false)}
                     >
                       Save Invoices
                     </NavLink>
                     <NavLink
                       to="/customers"
                       className="block px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                      onClick={() => setDropdownOpen(false)}
                     >
                       Customer
                     </NavLink>
                     <NavLink
                       to="/inventory"
                       className="block px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                      onClick={() => setDropdownOpen(false)}
                     >
                       Inventory
                     </NavLink>
                     <NavLink
                       to="/business-settings"
                       className="block px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                      onClick={() => setDropdownOpen(false)}
                     >
                       Setting
                     </NavLink>
@@ -110,6 +118,17 @@ const Navbar = () => {
                   Go to main Website
                 </Button>
               </NavLink>
+
+              {/* Sign Out — only when logged in */}
+              {user && (
+                <Button
+                  onClick={handleSignOut}
+                  variant="outline"
+                  className="border-[#065303] text-[#065303] hover:bg-[#065303] hover:text-white"
+                >
+                  Sign Out
+                </Button>
+              )}
             </div>
           </div>
 
@@ -178,10 +197,24 @@ const Navbar = () => {
               Quick Invoice
             </NavLink>
 
-            <div className="px-3 py-2">
+            <div className="px-3 py-2 space-y-2">
               <Button className="w-full bg-[#065303] text-white hover:bg-[#054802]">
                 Get Started
               </Button>
+
+              {/* Sign Out on mobile — only when logged in */}
+              {user && (
+                <Button
+                  onClick={() => {
+                    setIsOpen(false);
+                    handleSignOut();
+                  }}
+                  variant="outline"
+                  className="w-full border-[#065303] text-[#065303] hover:bg-[#065303] hover:text-white"
+                >
+                  Sign Out
+                </Button>
+              )}
             </div>
           </div>
         </div>
