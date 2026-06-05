@@ -37,7 +37,6 @@ const parseVariants = (p: InventoryProduct): Variant[] => {
   catch { return []; }
 };
 
-// Handles old plain-URL strings, new JSON arrays, and null
 const parsePhotoUrls = (photo_url: string | null | undefined): string[] => {
   if (!photo_url) return [];
   try {
@@ -49,7 +48,6 @@ const parsePhotoUrls = (photo_url: string | null | undefined): string[] => {
   }
 };
 
-// Returns first photo URL or null
 const getFirstPhoto = (photo_url: string | null | undefined): string | null => {
   const urls = parsePhotoUrls(photo_url);
   return urls.length > 0 ? urls[0] : null;
@@ -74,6 +72,69 @@ const getMinPrice = (variants: Variant[], fallback: number) => {
 };
 
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ── Floating CTA Banner ───────────────────────────────────────────────────────
+function FloatingCTA() {
+  const [visible, setVisible] = useState(true);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md"
+      style={{ fontFamily: "'DM Sans', sans-serif" }}
+    >
+      <div
+        className="relative flex items-center gap-3 rounded-2xl px-4 py-3 shadow-2xl border border-white/20"
+        style={{
+          background: "linear-gradient(135deg, #1c1c1e 0%, #2d2a3e 60%, #1e2a3a 100%)",
+        }}
+      >
+        {/* Glow blob */}
+        <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+          <div className="absolute -top-4 -left-4 w-24 h-24 rounded-full bg-indigo-600/20 blur-2xl" />
+          <div className="absolute -bottom-4 -right-4 w-20 h-20 rounded-full bg-violet-600/20 blur-2xl" />
+        </div>
+
+        {/* Icon */}
+        <div className="relative shrink-0 w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center">
+          <span className="text-lg">✨</span>
+        </div>
+
+        {/* Text */}
+        <div className="relative flex-1 min-w-0">
+          <p className="text-white text-[13px] font-semibold leading-tight">
+            Want your own store like this?
+          </p>
+          <p className="text-slate-400 text-[11px] mt-0.5 leading-tight truncate">
+            Create your free catalog in minutes
+          </p>
+        </div>
+
+        {/* CTA button */}
+        <a
+          href="/"
+          className="relative shrink-0 flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-400 active:bg-indigo-600 text-white text-xs font-bold rounded-xl px-3.5 py-2 transition-all duration-150 shadow-lg shadow-indigo-900/40 whitespace-nowrap"
+          style={{ letterSpacing: "0.01em" }}
+        >
+          Try Free
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5-5 5M6 12h12" />
+          </svg>
+        </a>
+
+        {/* Dismiss */}
+        <button
+          onClick={() => setVisible(false)}
+          className="relative shrink-0 w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-400 hover:text-white transition-colors text-xs"
+          aria-label="Dismiss"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ── Product Detail Modal ──────────────────────────────────────────────────────
 function ProductModal({ product, onClose }: { product: InventoryProduct; onClose: () => void }) {
@@ -110,7 +171,6 @@ function ProductModal({ product, onClose }: { product: InventoryProduct; onClose
                 alt={product.name}
                 className="w-full h-60 sm:h-72 object-cover sm:rounded-t-3xl rounded-t-3xl"
               />
-              {/* Nav arrows for multiple photos */}
               {photos.length > 1 && (
                 <>
                   <button
@@ -126,7 +186,6 @@ function ProductModal({ product, onClose }: { product: InventoryProduct; onClose
                   </span>
                 </>
               )}
-              {/* Thumbnail strip */}
               {photos.length > 1 && (
                 <div className="absolute bottom-3 left-3 flex gap-1.5">
                   {photos.map((_, i) => (
@@ -235,7 +294,6 @@ export default function PublicStore() {
     (async () => {
       setLoading(true);
 
-      // ── FIX: Fetch business name from business_settings (not profiles) ──
       const { data: bizSettings } = await supabase
         .from("business_settings")
         .select("business_name")
@@ -245,7 +303,6 @@ export default function PublicStore() {
       if (bizSettings?.business_name) {
         setStoreName(bizSettings.business_name);
       } else {
-        // Fallback to profile name if business_settings not set
         const { data: profile } = await (supabase as any)
           .from("profiles")
           .select("full_name, company_name")
@@ -253,7 +310,7 @@ export default function PublicStore() {
           .maybeSingle();
         if (profile?.company_name) setStoreName(profile.company_name);
         else if (profile?.full_name) setStoreName(`${profile.full_name}'s Store`);
-        else setStoreName("Our Store");
+        else setStoreName("Store");
       }
 
       const { data, error: err } = await supabase
@@ -394,7 +451,7 @@ export default function PublicStore() {
         )}
 
         {/* ── Grid ── */}
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 py-7 pb-16">
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 py-7 pb-28">
           {filtered.length === 0 ? (
             <div className="text-center py-24">
               <p className="text-5xl mb-4">🛒</p>
@@ -406,11 +463,9 @@ export default function PublicStore() {
               {filtered.map((product) => {
                 const variants   = parseVariants(product);
                 const minPrice   = getMinPrice(variants, product.unit_price);
-                const maxPrice   = variants.length ? Math.max(...variants.map((v) => v.unit_price).filter(Boolean)) : product.unit_price;
                 const totalStock = getTotalStock(variants, product.current_stock);
                 const inStock    = totalStock > 0;
-                const hasRange   = variants.length > 1 && minPrice !== maxPrice;
-                // ── FIX: parse photo_url as JSON array ──
+                const hasRange   = variants.length > 1 && minPrice !== Math.max(...variants.map((v) => v.unit_price).filter(Boolean));
                 const firstPhoto = getFirstPhoto(product.photo_url);
 
                 return (
@@ -443,7 +498,6 @@ export default function PublicStore() {
                       {variants.length > 1 && (
                         <span className="absolute bottom-2 right-2 text-[10px] font-bold bg-white/80 backdrop-blur-sm text-gray-700 rounded-full px-2 py-0.5 border border-white">{variants.length} options</span>
                       )}
-                      {/* Multi-photo indicator */}
                       {parsePhotoUrls(product.photo_url).length > 1 && (
                         <span className="absolute bottom-2 left-2 text-[10px] font-bold bg-black/40 text-white backdrop-blur-sm rounded-full px-2 py-0.5">
                           +{parsePhotoUrls(product.photo_url).length - 1} photos
@@ -481,9 +535,26 @@ export default function PublicStore() {
         {/* ── Footer ── */}
         <footer className="border-t border-[#ddd8d0] bg-[#1c1c1e] text-center py-8 px-6">
           <p className="text-slate-400 text-sm font-medium">{storeName}</p>
-          <p className="text-slate-600 text-xs mt-1">Powered by your Inventory System</p>
+          {/* ── Footer CTA ── */}
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <p className="text-slate-500 text-xs">Want a store like this for your business?</p>
+            <a
+              href="/"
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-full px-5 py-2 transition-colors shadow-lg shadow-indigo-900/30"
+            >
+              <span>✨</span>
+              Create your free catalog
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5-5 5M6 12h12" />
+              </svg>
+            </a>
+          </div>
+          <p className="text-slate-600 text-xs mt-4">Powered by Invoicely</p>
         </footer>
       </div>
+
+      {/* ── Floating CTA (dismissible) ── */}
+      <FloatingCTA />
 
       {selected && <ProductModal product={selected} onClose={() => setSelected(null)} />}
     </>

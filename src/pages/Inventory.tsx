@@ -180,9 +180,9 @@ const Inventory = () => {
   const { canDelete } = useRole(); // ← role guard
 
   // ── Public store link ──────────────────────────────────
-  const publicStoreUrl = user
-    ? `${window.location.origin}/store/${user.id}`
-    : "";
+  const publicStoreUrl = user && ownerId
+  ? `${window.location.origin}/store/${ownerId}`
+  : "";
   const [linkCopied, setLinkCopied] = useState(false);
 
   const handleCopyStoreLink = () => {
@@ -584,8 +584,16 @@ const Inventory = () => {
                 <Store className="w-4.5 h-4.5 text-indigo-600" />
               </div>
               <div>
-                <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Your Public Store</p>
-                <p className="text-[11px] text-indigo-400">Customers can browse your live inventory at this link</p>
+                {/* <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Your Public Store</p> */}
+                <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+  {activeCompany && !activeCompany.isOwn ? `${activeCompany.companyName}'s Store` : "Your Public Store"}
+</p>
+                {/* <p className="text-[11px] text-indigo-400">Customers can browse your live inventory at this link</p> */}
+                <p className="text-[11px] text-indigo-400">
+  {activeCompany && !activeCompany.isOwn
+    ? `Sharing ${activeCompany.companyName}'s store`
+    : "Customers can browse your live inventory at this link"}
+</p>
               </div>
             </div>
             <div className="flex-1 flex items-center gap-2 bg-white border border-indigo-200 rounded-lg px-3 py-1.5 min-w-0">
